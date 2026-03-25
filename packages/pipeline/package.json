@@ -1,0 +1,10 @@
+{
+  "name": "@klaus/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@klaus/llm-client": "workspace:*",
+    "@klaus/agent-loop": "workspace:*"
+  }
+}
