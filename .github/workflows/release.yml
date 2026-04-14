@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: linux-arm64
+            os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+
+      # Package the built CLI as a tarball
+      - name: Create distribution tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DIST_NAME="klaus-${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/${DIST_NAME}"
+
+          # Copy built packages
+          cp -r packages/llm-client/dist "dist/${DIST_NAME}/llm-client"
+          cp -r packages/agent-loop/dist "dist/${DIST_NAME}/agent-loop"
+          cp -r packages/pipeline/dist "dist/${DIST_NAME}/pipeline"
+          cp -r packages/cli/dist "dist/${DIST_NAME}/cli"
+
+          # Copy package.json files (needed for module resolution)
+          for pkg in llm-client agent-loop pipeline cli; do
+            cp "packages/${pkg}/package.json" "dist/${DIST_NAME}/${pkg}/"
+          done
+
+          # Copy pipelines and docs
+          cp -r pipelines "dist/${DIST_NAME}/pipelines"
+          cp README.md LICENSE "dist/${DIST_NAME}/" 2>/dev/null || true
+
+          # Create runner script
+          cat > "dist/${DIST_NAME}/klaus" << 'SCRIPT'
+          #!/usr/bin/env node
+          import("./cli/cli.js");
+          SCRIPT
+          chmod +x "dist/${DIST_NAME}/klaus"
+
+          # Create tarball
+          cd dist
+          tar -czf "${DIST_NAME}.tar.gz" "${DIST_NAME}"
+          sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256"
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          generate_release_notes: true
+
+  # Also create a platform-independent source distribution
+  source-dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+
+      - name: Create source distribution
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DIST_NAME="klaus-${VERSION}-source"
+          mkdir -p "dist/${DIST_NAME}"
+
+          # Copy everything needed to run
+          cp -r packages pipelines dist/${DIST_NAME}/
+          cp package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json dist/${DIST_NAME}/
+          cp README.md LICENSE dist/${DIST_NAME}/ 2>/dev/null || true
+          cp biome.json dist/${DIST_NAME}/ 2>/dev/null || true
+
+          cd dist
+          tar -czf "${DIST_NAME}.tar.gz" "${DIST_NAME}"
+          sha256sum "${DIST_NAME}.tar.gz" > "${DIST_NAME}.tar.gz.sha256"
+
+      - name: Upload source distribution
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          generate_release_notes: true

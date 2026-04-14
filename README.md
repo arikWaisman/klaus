@@ -695,15 +695,17 @@ klaus/
     consensus-loop.dot
 ```
 
-### Versioning
+### Versioning and Releases
 
-Klaus uses [changesets](https://github.com/changesets/changesets) for version management. All `@klaus/*` packages are linked — they share the same version number.
+Klaus uses [changesets](https://github.com/changesets/changesets) for version management and GitHub Releases for distribution.
 
 ```bash
 pnpm changeset              # Create a changeset describing your changes
 pnpm version-packages       # Apply changesets to bump versions and update changelogs
-pnpm release                # Build and publish to npm
+git tag v0.2.0 && git push --tags   # Tag triggers the release workflow
 ```
+
+Pushing a `v*` tag triggers the GitHub Actions release workflow, which builds, tests, and publishes tarballs + SHA256 checksums to GitHub Releases. CI runs on every push and PR to `main`.
 
 ## Upstream Specs
 
