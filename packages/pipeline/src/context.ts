@@ -41,6 +41,18 @@ export class Context implements PipelineContext {
 		};
 	}
 
+	/**
+	 * Create an isolated copy of this context.
+	 * Writes to the clone do not affect the parent.
+	 */
+	clone(): Context {
+		const copy = new Context();
+		for (const [k, v] of this.store) {
+			copy.store.set(k, v);
+		}
+		return copy;
+	}
+
 	static fromCheckpoint(cp: Checkpoint): Context {
 		const ctx = new Context();
 		ctx.merge(cp.context_values);

@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createAnthropicProfile } from "../src/profiles/anthropic.js";
-import { createOpenAIProfile } from "../src/profiles/openai.js";
 import { createGeminiProfile } from "../src/profiles/gemini.js";
+import { createOpenAIProfile } from "../src/profiles/openai.js";
 import type { ExecutionEnvironment, ProviderProfile } from "../src/types.js";
 
 const mockEnv = {

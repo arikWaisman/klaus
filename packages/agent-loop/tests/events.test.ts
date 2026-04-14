@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "../src/events.js";
 import type { SessionEvent } from "../src/types.js";
 

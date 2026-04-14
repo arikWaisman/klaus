@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Client, Response } from "@klaus/llm-client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../src/session.js";
 import type {
-	ProviderProfile,
 	ExecutionEnvironment,
-	ToolSchema,
-	ToolExecutor,
+	ProviderProfile,
 	SessionConfig,
 	SessionEvent,
+	ToolExecutor,
+	ToolSchema,
 } from "../src/types.js";
-import type { Client, Response } from "@klaus/llm-client";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,9 +120,7 @@ function createMockProfile(executors?: Map<string, ToolExecutor>): ProviderProfi
 		model: "test-model",
 		tool_executors: defaultExecutors,
 		build_system_prompt: vi.fn().mockReturnValue("You are a helpful assistant."),
-		tools: vi.fn().mockReturnValue(
-			Array.from(defaultExecutors.values()).map((e) => e.schema),
-		),
+		tools: vi.fn().mockReturnValue(Array.from(defaultExecutors.values()).map((e) => e.schema)),
 		provider_options: vi.fn().mockReturnValue(null),
 		supports_reasoning: false,
 		supports_streaming: false,
@@ -398,9 +396,7 @@ describe("Session", () => {
 
 		session.close();
 
-		await expect(session.process_input("Hello")).rejects.toThrow(
-			"Session is closed",
-		);
+		await expect(session.process_input("Hello")).rejects.toThrow("Session is closed");
 	});
 
 	// 12. Unknown tool returns error result (not exception)
@@ -438,9 +434,7 @@ describe("Session", () => {
 		(failingExecutor.execute as ReturnType<typeof vi.fn>).mockRejectedValue(
 			new Error("Permission denied"),
 		);
-		const executors = new Map<string, ToolExecutor>([
-			["read_file", failingExecutor],
-		]);
+		const executors = new Map<string, ToolExecutor>([["read_file", failingExecutor]]);
 		const profile = createMockProfile(executors);
 
 		const client = createMockClient([

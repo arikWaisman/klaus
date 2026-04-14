@@ -72,5 +72,8 @@ export {
 	parseDuration,
 } from "./handlers.js";
 
+// Fidelity
+export { resolveFidelity, buildContextPreamble, findIncomingEdge } from "./fidelity.js";
+
 // Engine
 export { PipelineEngine, createAutoApproveInterviewer, QueueInterviewer } from "./engine.js";

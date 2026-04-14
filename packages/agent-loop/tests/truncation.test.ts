@@ -1,11 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-	truncateChars,
-	truncateLines,
-	truncateToolOutput,
 	DEFAULT_CHAR_LIMITS,
 	DEFAULT_LINE_LIMITS,
 	TRUNCATION_MODES,
+	truncateChars,
+	truncateLines,
+	truncateToolOutput,
 } from "../src/truncation.js";
 
 describe("truncateChars", () => {
@@ -22,7 +22,9 @@ describe("truncateChars", () => {
 
 			// Head half = 20 chars, tail half = 20 chars, 60 removed
 			expect(result).toContain("A".repeat(20));
-			expect(result).toContain("[WARNING: Tool output was truncated. 60 characters were removed from the middle. Full output available in events.]");
+			expect(result).toContain(
+				"[WARNING: Tool output was truncated. 60 characters were removed from the middle. Full output available in events.]",
+			);
 			expect(result.startsWith("A".repeat(20))).toBe(true);
 			expect(result.endsWith("A".repeat(20))).toBe(true);
 		});
@@ -40,7 +42,9 @@ describe("truncateChars", () => {
 			const result = truncateChars(output, 60, "tail");
 
 			// 40 chars removed from the front, last 60 chars kept
-			expect(result).toContain("[WARNING: Tool output was truncated. First 40 characters were removed.]");
+			expect(result).toContain(
+				"[WARNING: Tool output was truncated. First 40 characters were removed.]",
+			);
 			expect(result.endsWith("B".repeat(50))).toBe(true);
 		});
 	});

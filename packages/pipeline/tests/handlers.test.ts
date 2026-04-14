@@ -1,16 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { Context } from "../src/context.js";
 import {
 	HandlerRegistry,
-	shapeToType,
-	startHandler,
-	exitHandler,
+	codergenHandler,
 	conditionalHandler,
+	exitHandler,
 	extractAcceleratorKey,
 	parseDuration,
-	codergenHandler,
+	shapeToType,
+	startHandler,
 } from "../src/handlers.js";
-import { Context } from "../src/context.js";
-import type { HandlerContext, Node, Graph, CodergenBackend } from "../src/types.js";
+import type { CodergenBackend, Graph, HandlerContext, Node } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -187,11 +187,7 @@ describe("codergenHandler", () => {
 		expect(outcome.status).toBe("success");
 		expect(outcome.notes).toBe("Generated code output");
 		expect(outcome.context_updates).toEqual({ "gen.response": "Generated code output" });
-		expect(mockBackend.run).toHaveBeenCalledWith(
-			ctx.node,
-			"Write code",
-			context,
-		);
+		expect(mockBackend.run).toHaveBeenCalledWith(ctx.node, "Write code", context);
 	});
 
 	it("expands $goal in prompt", async () => {

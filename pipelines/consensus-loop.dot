@@ -1,0 +1,102 @@
+digraph ConsensusLoop {
+	graph [
+		goal="Reach unanimous multi-model consensus on the task"
+		label="Multi-Model Consensus Loop"
+		default_max_retries=1
+		default_fidelity="compact"
+	]
+
+	// ── Entry ────────────────────────────────────────────────────
+	Start [shape=Mdiamond]
+
+	// ── Plan ─────────────────────────────────────────────────────
+	Plan [
+		shape=box
+		prompt="Analyze the codebase and create a detailed implementation plan for: $goal\n\nBe specific about files to change, approach, and trade-offs."
+	]
+
+	// ── Fan-out: independent drafts from 3 models ────────────────
+	FanOut [shape=component, max_parallel=3]
+
+	DraftClaude [
+		shape=box
+		prompt="Draft an implementation for: $goal\n\nFollow the plan from the previous step. Be thorough and precise."
+		llm_model="claude-sonnet-4-5-20250929"
+	]
+
+	DraftGPT [
+		shape=box
+		prompt="Draft an implementation for: $goal\n\nFollow the plan from the previous step. Be thorough and precise."
+		llm_model="gpt-4o"
+	]
+
+	DraftGemini [
+		shape=box
+		prompt="Draft an implementation for: $goal\n\nFollow the plan from the previous step. Be thorough and precise."
+		llm_model="gemini-2.0-flash"
+	]
+
+	// ── Fan-in: collect drafts ───────────────────────────────────
+	CollectDrafts [shape=tripleoctagon]
+
+	// ── Cross-critique: review ALL drafts ────────────────────────
+	Critique [
+		shape=box
+		fidelity="full"
+		prompt="You have three independent implementations of: $goal\n\n## Claude's Draft\n${DraftClaude.response}\n\n## GPT's Draft\n${DraftGPT.response}\n\n## Gemini's Draft\n${DraftGemini.response}\n\nCritique each draft. Identify:\n1. Which approach is best and why\n2. Bugs or issues in each\n3. What to keep from each draft\n4. A unified recommendation\n\nBe specific and constructive."
+	]
+
+	// ── Synthesize: merge the best parts ─────────────────────────
+	Synthesize [
+		shape=box
+		fidelity="full"
+		prompt="Based on the critique and the original drafts, create the final synthesized implementation that incorporates the best ideas from all three. Implement it now."
+	]
+
+	// ── Consensus check: does every model agree? ─────────────────
+	ConsensusCheck [
+		shape=box
+		prompt="Review the synthesized implementation.\n\nDoes this implementation fully and correctly address: $goal?\n\nCheck for:\n1. Correctness - does it work?\n2. Completeness - is anything missing?\n3. Quality - is the code clean and maintainable?\n\nIf ALL checks pass, respond with exactly: CONSENSUS_REACHED\nIf ANY check fails, explain what needs to be fixed."
+	]
+
+	// ── Gate: route based on consensus ────────────────────────────
+	Gate [shape=diamond]
+
+	// ── Fix loop: address remaining issues ───────────────────────
+	Fix [
+		shape=box
+		fidelity="full"
+		prompt="The consensus check found issues. Fix all identified issues in the current implementation, then verify your fixes are correct."
+		max_retries=2
+	]
+
+	// ── Verify after fix ─────────────────────────────────────────
+	Test [shape=parallelogram, tool_command="pnpm test", timeout="120s"]
+
+	// ── Exit ─────────────────────────────────────────────────────
+	End [shape=Msquare]
+
+	// ── Edges ────────────────────────────────────────────────────
+	Start -> Plan
+	Plan -> FanOut
+
+	FanOut -> DraftClaude
+	FanOut -> DraftGPT
+	FanOut -> DraftGemini
+
+	DraftClaude -> CollectDrafts
+	DraftGPT -> CollectDrafts
+	DraftGemini -> CollectDrafts
+
+	CollectDrafts -> Critique
+	Critique -> Synthesize
+	Synthesize -> ConsensusCheck
+	ConsensusCheck -> Gate
+
+	Gate -> End [condition="context.ConsensusCheck.response~=CONSENSUS_REACHED"]
+	Gate -> Fix [condition="context.ConsensusCheck.response!~=CONSENSUS_REACHED"]
+
+	Fix -> Test
+	Test -> ConsensusCheck [condition="outcome=success"]
+	Test -> Fix [condition="outcome=fail"]
+}

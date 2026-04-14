@@ -142,6 +142,56 @@ export class PipelineEngine {
 					return outcome;
 				}
 
+				// ── Parallel fanout ──────────────────────────────────────
+				// When a parallel node returns multiple suggested_next_ids,
+				// execute ALL branches concurrently rather than picking one.
+				if (
+					handlerType === "parallel" &&
+					outcome.suggested_next_ids &&
+					outcome.suggested_next_ids.length > 1
+				) {
+					const maxParallel = node.attributes.max_parallel ?? Number.POSITIVE_INFINITY;
+					const fanInOutcome = await this.executeParallelBranches(
+						outcome.suggested_next_ids,
+						maxParallel,
+					);
+
+					// After fan-in, apply its context and continue from the
+					// fan-in node's outgoing edge.
+					if (fanInOutcome.context_updates) {
+						this.context.merge(fanInOutcome.context_updates);
+					}
+					this.context.set("outcome", fanInOutcome.status);
+
+					// Find the fan-in node (already completed inside
+					// executeParallelBranches) and select its next edge.
+					const fanInNodeId = this.context.get("parallel.fan_in_node") as string | undefined;
+					if (fanInNodeId) {
+						const fanInNode = this.graph.nodes.get(fanInNodeId);
+						if (fanInNode && this.isExitNode(fanInNode)) {
+							this.emitEvent("PipelineCompleted", {
+								duration: Date.now() - startTime,
+							});
+							return fanInOutcome;
+						}
+						const nextAfterFanIn = this.selectEdge(fanInNode!, fanInOutcome);
+						if (!nextAfterFanIn) {
+							this.emitEvent("PipelineCompleted", {
+								duration: Date.now() - startTime,
+							});
+							return fanInOutcome;
+						}
+						currentNodeId = nextAfterFanIn.to;
+						continue;
+					}
+
+					// No fan-in node found — pipeline ends after branches.
+					this.emitEvent("PipelineCompleted", {
+						duration: Date.now() - startTime,
+					});
+					return fanInOutcome;
+				}
+
 				// Select next edge
 				const nextEdge = this.selectEdge(node, outcome);
 				if (!nextEdge) {
@@ -176,7 +226,11 @@ export class PipelineEngine {
 		);
 	}
 
-	private async executeWithRetry(node: Node, handler: Handler): Promise<Outcome> {
+	private async executeWithRetry(
+		node: Node,
+		handler: Handler,
+		contextOverride?: PipelineContext,
+	): Promise<Outcome> {
 		const maxRetries =
 			node.attributes.max_retries ?? this.graph.attributes.default_max_retries ?? 0;
 		const policy: RetryPolicy = {
@@ -191,7 +245,7 @@ export class PipelineEngine {
 			try {
 				const ctx: HandlerContext = {
 					node,
-					context: this.context,
+					context: contextOverride ?? this.context,
 					graph: this.graph,
 					logs_root: this.logs_root,
 					interviewer: this.interviewer,
@@ -306,6 +360,149 @@ export class PipelineEngine {
 		return weightMatches[0] ?? null;
 	}
 
+	/**
+	 * Execute parallel branches concurrently with isolated contexts.
+	 *
+	 * Each branch gets a cloned context so writes don't race. After all
+	 * branches complete, per-branch results (including node responses) are
+	 * merged back into the parent context under `parallel.results` and
+	 * `<nodeId>.response` keys, then the fan-in handler runs.
+	 */
+	private async executeParallelBranches(
+		branchStartIds: string[],
+		maxParallel = Number.POSITIVE_INFINITY,
+	): Promise<Outcome> {
+		this.emitEvent("ParallelStarted", {
+			branches: branchStartIds,
+			count: branchStartIds.length,
+		});
+
+		interface BranchResult {
+			branch_node: string;
+			status: string;
+			notes?: string;
+			response?: string;
+			context_updates: Record<string, unknown>;
+			failure_reason?: string;
+		}
+
+		let fanInNodeId: string | undefined;
+
+		const executeBranch = async (startId: string): Promise<BranchResult> => {
+			this.emitEvent("ParallelBranchStarted", { node_id: startId });
+
+			// Isolated context — writes here don't affect other branches.
+			const branchContext = (this.context as Context).clone();
+			let currentId = startId;
+			let lastOutcome: Outcome = { status: "success" };
+			const collectedUpdates: Record<string, unknown> = {};
+
+			while (true) {
+				const node = this.graph.nodes.get(currentId);
+				if (!node) break;
+
+				const nodeType = this.registry.resolveType(node);
+				if (nodeType === "parallel.fan_in") {
+					fanInNodeId = currentId;
+					break;
+				}
+
+				const handler = this.registry.get(nodeType);
+				if (!handler) break;
+
+				lastOutcome = await this.executeWithRetry(node, handler, branchContext);
+				this.completed_nodes.add(currentId);
+
+				if (lastOutcome.context_updates) {
+					branchContext.merge(lastOutcome.context_updates);
+					Object.assign(collectedUpdates, lastOutcome.context_updates);
+				}
+				branchContext.set("outcome", lastOutcome.status);
+
+				if (this.isExitNode(node)) break;
+
+				const nextEdge = this.selectEdge(node, lastOutcome);
+				if (!nextEdge) break;
+				currentId = nextEdge.to;
+			}
+
+			this.emitEvent("ParallelBranchCompleted", {
+				node_id: startId,
+				status: lastOutcome.status,
+			});
+
+			return {
+				branch_node: startId,
+				status: lastOutcome.status,
+				notes: lastOutcome.notes,
+				response: collectedUpdates[`${startId}.response`] as string | undefined,
+				context_updates: collectedUpdates,
+				failure_reason: lastOutcome.failure_reason,
+			};
+		};
+
+		// Run branches with concurrency limit.
+		const settled = await promiseAllSettledLimit(
+			branchStartIds.map((id) => () => executeBranch(id)),
+			maxParallel,
+		);
+
+		const branchResults: BranchResult[] = [];
+		for (let i = 0; i < settled.length; i++) {
+			const result = settled[i]!;
+			if (result.status === "fulfilled") {
+				branchResults.push(result.value);
+			} else {
+				branchResults.push({
+					branch_node: branchStartIds[i]!,
+					status: "fail",
+					context_updates: {},
+					failure_reason:
+						result.reason instanceof Error ? result.reason.message : String(result.reason),
+				});
+			}
+		}
+
+		// Merge all branch context_updates back into the parent context.
+		for (const br of branchResults) {
+			this.context.merge(br.context_updates);
+		}
+
+		// Store structured results for the fan-in handler.
+		this.context.set("parallel.results", branchResults);
+
+		this.emitEvent("ParallelCompleted", {
+			results: branchResults,
+			count: branchResults.length,
+		});
+
+		// Execute the fan-in node if one was found.
+		if (fanInNodeId) {
+			this.context.set("parallel.fan_in_node", fanInNodeId);
+			const fanInNode = this.graph.nodes.get(fanInNodeId);
+			if (fanInNode) {
+				const fanInType = this.registry.resolveType(fanInNode);
+				const fanInHandler = this.registry.get(fanInType);
+				if (fanInHandler) {
+					const fanInOutcome = await this.executeWithRetry(fanInNode, fanInHandler);
+					this.completed_nodes.add(fanInNodeId);
+					if (fanInOutcome.context_updates) {
+						this.context.merge(fanInOutcome.context_updates);
+					}
+					this.saveCheckpoint(fanInNodeId);
+					return fanInOutcome;
+				}
+			}
+		}
+
+		// No fan-in — synthesize outcome from results.
+		const allSuccess = branchResults.every((r) => r.status === "success");
+		return {
+			status: allSuccess ? "success" : "partial_success",
+			context_updates: { "parallel.results": branchResults },
+		};
+	}
+
 	private computeRetryDelay(attempt: number, policy: RetryPolicy): number {
 		let delay = policy.initial_delay_ms * policy.backoff_factor ** attempt;
 		delay = Math.min(delay, policy.max_delay_ms);
@@ -395,6 +592,55 @@ export class QueueInterviewer implements Interviewer {
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Like Promise.allSettled but limits how many tasks run concurrently.
+ * Each task is a zero-arg function that returns a promise.
+ */
+function promiseAllSettledLimit<T>(
+	tasks: Array<() => Promise<T>>,
+	limit: number,
+): Promise<PromiseSettledResult<T>[]> {
+	if (tasks.length === 0) return Promise.resolve([]);
+	if (!Number.isFinite(limit) || limit >= tasks.length) {
+		return Promise.allSettled(tasks.map((fn) => fn()));
+	}
+
+	return new Promise((resolve) => {
+		const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+		let next = 0;
+		let settled = 0;
+
+		const run = (index: number) => {
+			const task = tasks[index]!;
+			task().then(
+				(value) => {
+					results[index] = { status: "fulfilled", value };
+					settled++;
+					if (settled === tasks.length) {
+						resolve(results);
+					} else if (next < tasks.length) {
+						run(next++);
+					}
+				},
+				(reason) => {
+					results[index] = { status: "rejected", reason };
+					settled++;
+					if (settled === tasks.length) {
+						resolve(results);
+					} else if (next < tasks.length) {
+						run(next++);
+					}
+				},
+			);
+		};
+
+		const initialBatch = Math.min(limit, tasks.length);
+		for (let i = 0; i < initialBatch; i++) {
+			run(next++);
+		}
+	});
 }
 
 // Re-export the Interviewer helpers

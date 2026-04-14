@@ -1,3 +1,4 @@
+import { buildContextPreamble, findIncomingEdge, resolveFidelity } from "./fidelity.js";
 import type { CodergenBackend, Handler, HandlerContext, Node, Option, Outcome } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -77,7 +78,12 @@ const startHandler: Handler = async () => {
 // Handler: exit
 // ---------------------------------------------------------------------------
 
-const exitHandler: Handler = async () => {
+const exitHandler: Handler = async (ctx: HandlerContext) => {
+	// Propagate the prior stage's status so that partial failures are visible.
+	const prior = ctx.context.get("outcome") as string | undefined;
+	if (prior === "partial_success" || prior === "fail") {
+		return { status: prior as "partial_success" | "fail" };
+	}
 	return { status: "success" };
 };
 
@@ -93,6 +99,14 @@ const codergenHandler: Handler = async (ctx: HandlerContext): Promise<Outcome> =
 	const goal = ctx.context.get("graph.goal");
 	if (typeof goal === "string") {
 		prompt = prompt.replace(/\$goal/g, goal);
+	}
+
+	// Resolve fidelity and prepend prior context
+	const incomingEdge = findIncomingEdge(ctx.graph, ctx.node.id);
+	const fidelity = resolveFidelity(ctx.node, incomingEdge, ctx.graph.attributes.default_fidelity);
+	const preamble = buildContextPreamble(ctx.context, fidelity, ctx.node.id);
+	if (preamble) {
+		prompt = `${preamble}\n${prompt}`;
 	}
 
 	// Get the backend from context

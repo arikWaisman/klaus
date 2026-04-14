@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { parseDOT } from "../src/parser.js";
 
 const SAMPLE_DOT = `
@@ -60,9 +60,7 @@ describe("parseDOT", () => {
 	it("parses edge attributes (label, condition, weight)", () => {
 		const graph = parseDOT(SAMPLE_DOT);
 
-		const rejectEdge = graph.edges.find(
-			(e) => e.from === "review" && e.to === "code"
-		);
+		const rejectEdge = graph.edges.find((e) => e.from === "review" && e.to === "code");
 		expect(rejectEdge).toBeDefined();
 		expect(rejectEdge!.attributes.label).toBe("Reject");
 		expect(rejectEdge!.attributes.condition).toBe("preferred_label=Reject");

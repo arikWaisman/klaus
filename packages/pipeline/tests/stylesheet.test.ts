@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { parseStylesheet, applyStylesheet } from "../src/stylesheet.js";
+import { describe, expect, it } from "vitest";
+import { applyStylesheet, parseStylesheet } from "../src/stylesheet.js";
 import type { Graph, Node } from "../src/types.js";
 
 function makeNode(id: string, attrs: Node["attributes"] = {}): Node {
@@ -63,7 +63,9 @@ describe("parseStylesheet", () => {
 	});
 
 	it("parses multiple declarations separated by semicolons", () => {
-		const rules = parseStylesheet("* { llm_model: gpt-4; llm_provider: openai; reasoning_effort: high }");
+		const rules = parseStylesheet(
+			"* { llm_model: gpt-4; llm_provider: openai; reasoning_effort: high }",
+		);
 		expect(rules).toHaveLength(1);
 		expect(rules[0].declarations).toEqual({
 			llm_model: "gpt-4",
@@ -80,10 +82,7 @@ describe("parseStylesheet", () => {
 
 describe("applyStylesheet", () => {
 	it("applies universal rules to all nodes", () => {
-		const graph = makeGraph([
-			makeNode("a"),
-			makeNode("b"),
-		]);
+		const graph = makeGraph([makeNode("a"), makeNode("b")]);
 		const rules = parseStylesheet("* { llm_model: gpt-4 }");
 		const result = applyStylesheet(graph, rules);
 
@@ -93,9 +92,7 @@ describe("applyStylesheet", () => {
 	});
 
 	it("respects specificity (ID > class > shape > universal)", () => {
-		const graph = makeGraph([
-			makeNode("special", { class: "fast", shape: "diamond" }),
-		]);
+		const graph = makeGraph([makeNode("special", { class: "fast", shape: "diamond" })]);
 		const rules = parseStylesheet(
 			[
 				"* { llm_model: universal-model }",
@@ -110,9 +107,7 @@ describe("applyStylesheet", () => {
 	});
 
 	it("does not override explicit node attributes", () => {
-		const graph = makeGraph([
-			makeNode("a", { llm_model: "my-custom-model" }),
-		]);
+		const graph = makeGraph([makeNode("a", { llm_model: "my-custom-model" })]);
 		const rules = parseStylesheet("* { llm_model: gpt-4 }");
 		const result = applyStylesheet(graph, rules);
 		const node = result.nodes.get("a")!;

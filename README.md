@@ -115,7 +115,7 @@ Execute a DOT pipeline from start to exit.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-m, --model <model>` | `claude-sonnet-4-5-20250929` | Default LLM model for codergen nodes |
+| `-m, --model <model>` | Provider default | LLM model for codergen nodes (each provider has a built-in default; per-node `llm_model` overrides this) |
 | `--auto-approve` | `false` | Skip human approval gates (auto-approve all) |
 | `--logs <dir>` | `/tmp/klaus-logs` | Directory for pipeline execution logs |
 | `-q, --quiet` | `false` | Suppress event logging output |
@@ -198,9 +198,12 @@ You can also set the type explicitly with the `type` attribute: `MyNode [type="c
 | `prompt` | `codergen` | The instruction sent to the LLM. Use `$goal` to reference the pipeline's graph-level goal. |
 | `tool_command` | `tool` | Shell command to execute. |
 | `timeout` | `tool` | Command timeout. Supports `ms`, `s`, `m`, `h`, `d` suffixes. Default: `30s`. |
-| `llm_model` | `codergen` | Override the LLM model for this node. E.g., `llm_model="claude-opus-4-5-20250929"`. |
+| `llm_model` | `codergen` | Override the LLM model for this node. E.g., `llm_model="claude-opus-4-6"`. Any model string is passed through to the provider API. |
 | `llm_provider` | `codergen` | Override the LLM provider. |
 | `max_retries` | any | Number of retry attempts if the node fails. |
+| `max_parallel` | `parallel` | Max concurrent branches. Default: unlimited. E.g., `max_parallel=2`. |
+| `fidelity` | `codergen` | How much prior context to include. Values: `full`, `truncate` (400 chars), `compact` (3200, default), `summary:low` (2400), `summary:medium` (6000), `summary:high` (12000). |
+| `thread_id` | `codergen` | Nodes sharing the same `thread_id` reuse the same LLM session, preserving conversation history across nodes. |
 | `goal_gate` | any | If `true`, this node must complete successfully before the pipeline can exit. |
 | `label` | any | Display label. For `wait.human`, shown as the prompt text. |
 
@@ -211,6 +214,8 @@ You can also set the type explicitly with the `type` attribute: `MyNode [type="c
 | `condition` | Expression that must evaluate to true for this edge to be taken. See Condition Expressions below. |
 | `label` | Edge label. Used for preferred-label matching and displayed in human gates. |
 | `weight` | Numeric tiebreaker. Higher weight = preferred when multiple edges match. |
+| `fidelity` | Override fidelity for the target node (takes precedence over node-level fidelity). |
+| `thread_id` | Associate this transition with a conversation thread. |
 
 ### Condition Expressions
 
@@ -233,7 +238,13 @@ Review -> Plan [label="Reject", condition="preferred_label=Reject"]
 Gate -> Deploy [condition="outcome=success && context.tests_pass=true"]
 ```
 
-Supported operators: `=` (equals), `!=` (not equals), `&&` (and).
+Supported operators: `=` (equals), `!=` (not equals), `~=` (contains), `!~=` (not contains), `&&` (and).
+
+```dot
+// Contains / not contains — useful for checking LLM output
+Gate -> End [condition="context.ConsensusCheck.response~=CONSENSUS_REACHED"]
+Gate -> Fix [condition="context.ConsensusCheck.response!~=CONSENSUS_REACHED"]
+```
 
 ### Edge Selection Algorithm
 
@@ -322,6 +333,24 @@ Start -> Implement (Claude) -> Review (Claude) -> Test -> Check -> End
 - **Review**: A second model reviews the code for bugs, security issues, and style
 - **Test gate**: Shell command runs tests, loops through Fix if they fail
 
+### `consensus-loop.dot`
+
+Multi-model consensus loop — fan out to three models, critique, synthesize, and loop until unanimous agreement:
+
+```
+Start -> Plan -> FanOut -> [DraftClaude, DraftGPT, DraftGemini] -> CollectDrafts
+  -> Critique -> Synthesize -> ConsensusCheck -> Gate
+                                                   |
+                    Gate -> End (if CONSENSUS_REACHED)
+                    Gate -> Fix -> Test -> ConsensusCheck (loop)
+```
+
+- **FanOut**: Parallel fan-out to three branches, each using a different model (`claude-sonnet-4-5-20250929`, `gpt-4o`, `gemini-2.0-flash`)
+- **Critique**: Reviews all three drafts side-by-side, identifies the best approach
+- **Synthesize**: Merges the best ideas into a unified implementation
+- **ConsensusCheck**: Verifies correctness, completeness, and quality — responds `CONSENSUS_REACHED` or lists issues
+- **Loop**: If consensus not reached, Fix addresses issues, Test validates, and the loop continues
+
 ## Packages
 
 Klaus is a pnpm monorepo with four packages:
@@ -394,7 +423,7 @@ console.log(obj.output); // { name: "John", age: 30 }
 
 Or set `provider` explicitly on any request.
 
-**Features**: unified types, automatic tool call loop with `Promise.allSettled`, `generate_object()` / `stream_object()` with Zod, retry with exponential backoff + jitter + Retry-After, composable onion-model middleware, built-in model catalog, ESM + CJS output.
+**Features**: unified types, automatic tool call loop with `Promise.allSettled`, `generate_object()` / `stream_object()` with Zod, retry with exponential backoff + jitter + Retry-After, composable onion-model middleware, per-provider default models with runtime override, ESM + CJS output.
 
 ### @klaus/agent-loop
 
@@ -455,7 +484,7 @@ interface CodergenBackend {
 }
 ```
 
-The CLI's built-in backend creates a fresh `@klaus/agent-loop` Session for each codergen node, giving each node full tool access (file I/O, shell, grep, glob).
+The CLI's built-in backend creates an `@klaus/agent-loop` Session for each codergen node, giving each node full tool access (file I/O, shell, grep, glob). Nodes sharing a `thread_id` reuse the same session for conversation continuity.
 
 **The `Interviewer` interface** handles human-in-the-loop gates:
 
@@ -468,7 +497,7 @@ interface Interviewer {
 
 The CLI provides a `ConsoleInterviewer` (reads from stdin) and an auto-approve mode.
 
-**Features**: full DOT parser with attributes/subgraphs/chained edges, 9 built-in handlers, 5-step edge selection, model stylesheets, condition expressions, retry with exponential backoff + jitter, checkpoint serialization for pause/resume, graph validation, event stream.
+**Features**: full DOT parser with attributes/subgraphs/chained edges, 9 built-in handlers, 5-step edge selection, model stylesheets, condition expressions (`=`, `!=`, `~=`, `!~=`), fidelity system for context passing, parallel fanout with isolated contexts and concurrency control, retry with exponential backoff + jitter, checkpoint serialization for pause/resume, graph validation, event stream.
 
 ## Architecture
 
@@ -568,6 +597,32 @@ digraph WithApproval {
 }
 ```
 
+**Multi-model parallel fanout** (fan out to multiple models, join results):
+
+```dot
+digraph MultiModel {
+  graph [goal="..."]
+  Start [shape=Mdiamond]
+  Fan [shape=component, max_parallel=3]
+  Claude [shape=box, prompt="...", llm_model="claude-sonnet-4-5-20250929"]
+  GPT [shape=box, prompt="...", llm_model="gpt-4o"]
+  Gemini [shape=box, prompt="...", llm_model="gemini-2.0-flash"]
+  Join [shape=tripleoctagon]
+  End [shape=Msquare]
+
+  Start -> Fan
+  Fan -> Claude
+  Fan -> GPT
+  Fan -> Gemini
+  Claude -> Join
+  GPT -> Join
+  Gemini -> Join
+  Join -> End
+}
+```
+
+Each branch runs concurrently with an isolated context. After all branches complete, the fan-in node merges results. Branch outputs are available as `${Claude.response}`, `${GPT.response}`, etc. in downstream prompts.
+
 ## Development
 
 ```bash
@@ -610,6 +665,7 @@ klaus/
         handlers.ts         # 9 built-in node handlers
         validation.ts       # Graph validation and lint rules
         conditions.ts       # Condition expression evaluator
+        fidelity.ts         # Fidelity system for context passing
         context.ts          # Shared key-value context
         stylesheet.ts       # Model stylesheet parser
         transforms.ts       # Post-parse graph transforms
@@ -632,11 +688,21 @@ klaus/
         generate.ts         # High-level generate/stream/generate_object
         retry.ts            # Retry with exponential backoff
         middleware.ts       # Onion-model middleware
-        catalog.ts          # Model catalog
   pipelines/          # Starter pipeline files
     quick-start.dot
     plan-and-execute.dot
     multi-model-review.dot
+    consensus-loop.dot
+```
+
+### Versioning
+
+Klaus uses [changesets](https://github.com/changesets/changesets) for version management. All `@klaus/*` packages are linked — they share the same version number.
+
+```bash
+pnpm changeset              # Create a changeset describing your changes
+pnpm version-packages       # Apply changesets to bump versions and update changelogs
+pnpm release                # Build and publish to npm
 ```
 
 ## Upstream Specs

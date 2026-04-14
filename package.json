@@ -8,10 +8,15 @@
     "test:watch": "vitest",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "klaus": "node packages/cli/dist/cli.js"
+    "klaus": "node packages/cli/dist/cli.js",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
+    "@changesets/changelog-github": "^0.6.0",
+    "@changesets/cli": "^2.30.0",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"
   },

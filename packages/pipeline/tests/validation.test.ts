@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { validate, validateOrThrow } from "../src/validation.js";
+import { describe, expect, it } from "vitest";
 import { parseDOT } from "../src/parser.js";
+import { validate, validateOrThrow } from "../src/validation.js";
 
 function buildDOT(body: string): string {
 	return `digraph Test {\n${body}\n}`;
@@ -79,7 +79,9 @@ describe("validate", () => {
 		const errors = diagnostics.filter((d) => d.severity === "error");
 
 		expect(errors.length).toBeGreaterThanOrEqual(1);
-		expect(errors.some((e) => e.message.includes("orphan") && e.message.includes("reachable"))).toBe(true);
+		expect(
+			errors.some((e) => e.message.includes("orphan") && e.message.includes("reachable")),
+		).toBe(true);
 	});
 
 	it("edge referencing non-existent node produces error", () => {
@@ -126,7 +128,7 @@ describe("validate", () => {
 		const graph = parseDOT(dot);
 		const diagnostics = validate(graph);
 		const conditionErrors = diagnostics.filter(
-			(d) => d.severity === "error" && d.message.toLowerCase().includes("condition")
+			(d) => d.severity === "error" && d.message.toLowerCase().includes("condition"),
 		);
 
 		expect(conditionErrors).toHaveLength(0);
@@ -145,7 +147,9 @@ describe("validate", () => {
 		const errors = diagnostics.filter((d) => d.severity === "error");
 
 		expect(errors.length).toBeGreaterThanOrEqual(1);
-		expect(errors.some((e) => e.message.includes("start") && e.message.includes("incoming"))).toBe(true);
+		expect(errors.some((e) => e.message.includes("start") && e.message.includes("incoming"))).toBe(
+			true,
+		);
 	});
 
 	it("exit node with outgoing edges produces error", () => {
@@ -161,7 +165,9 @@ describe("validate", () => {
 		const errors = diagnostics.filter((d) => d.severity === "error");
 
 		expect(errors.length).toBeGreaterThanOrEqual(1);
-		expect(errors.some((e) => e.message.includes("end") && e.message.includes("outgoing"))).toBe(true);
+		expect(errors.some((e) => e.message.includes("end") && e.message.includes("outgoing"))).toBe(
+			true,
+		);
 	});
 
 	it("codergen without prompt or label produces warning", () => {
@@ -176,14 +182,18 @@ describe("validate", () => {
 		const warnings = diagnostics.filter((d) => d.severity === "warning");
 
 		expect(warnings.length).toBeGreaterThanOrEqual(1);
-		expect(warnings.some((w) => w.message.includes("bare") && w.message.toLowerCase().includes("prompt"))).toBe(true);
+		expect(
+			warnings.some(
+				(w) => w.message.includes("bare") && w.message.toLowerCase().includes("prompt"),
+			),
+		).toBe(true);
 	});
 
 	it("codergen with a prompt does not produce a warning", () => {
 		const graph = parseDOT(VALID_PIPELINE);
 		const diagnostics = validate(graph);
 		const warnings = diagnostics.filter(
-			(d) => d.severity === "warning" && d.message.includes("code")
+			(d) => d.severity === "warning" && d.message.includes("code"),
 		);
 
 		expect(warnings).toHaveLength(0);

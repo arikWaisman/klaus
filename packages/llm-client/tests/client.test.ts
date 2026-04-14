@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderAdapter } from "../src/adapters/adapter.js";
+import { AnthropicAdapter } from "../src/adapters/anthropic.js";
 import { Client } from "../src/client.js";
 import { ConfigurationError } from "../src/errors.js";
 import type { Middleware } from "../src/middleware.js";
@@ -410,6 +411,20 @@ describe("Client", () => {
 			expect(client.getDefaultModel("gemini")).toBe("gemini-2.0-flash");
 
 			vi.unstubAllEnvs();
+		});
+
+		it("respects default_model config override passed to adapter", () => {
+			const client = new Client({
+				adapters: {
+					anthropic: new AnthropicAdapter({
+						api_key: "sk-test",
+						default_model: "claude-opus-4-6",
+					}),
+				},
+				default_provider: "anthropic",
+			});
+
+			expect(client.getDefaultModel("anthropic")).toBe("claude-opus-4-6");
 		});
 	});
 

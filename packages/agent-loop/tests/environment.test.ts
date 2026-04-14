@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { LocalExecutionEnvironment } from "../src/environment.js";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { LocalExecutionEnvironment } from "../src/environment.js";
 
 describe("LocalExecutionEnvironment", () => {
 	let env: LocalExecutionEnvironment;
@@ -139,7 +139,7 @@ describe("LocalExecutionEnvironment", () => {
 
 	describe("exec_command", () => {
 		it("runs a simple command", async () => {
-			const result = await env.exec_command("echo \"hello\"", 5000);
+			const result = await env.exec_command('echo "hello"', 5000);
 
 			expect(result.stdout.trim()).toBe("hello");
 			expect(result.exit_code).toBe(0);
@@ -147,10 +147,7 @@ describe("LocalExecutionEnvironment", () => {
 		});
 
 		it("captures stdout and stderr", async () => {
-			const result = await env.exec_command(
-				"echo \"out\" && echo \"err\" >&2",
-				5000,
-			);
+			const result = await env.exec_command('echo "out" && echo "err" >&2', 5000);
 
 			expect(result.stdout).toContain("out");
 			expect(result.stderr).toContain("err");

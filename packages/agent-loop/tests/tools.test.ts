@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-	readFileTool,
-	writeFileTool,
-	editFileTool,
-	shellTool,
-	grepTool,
-	globTool,
 	applyPatchTool,
+	editFileTool,
+	globTool,
+	grepTool,
+	readFileTool,
+	shellTool,
+	writeFileTool,
 } from "../src/tools/core.js";
 import { DEFAULT_SESSION_CONFIG } from "../src/types.js";
 import type { ExecutionEnvironment, SessionConfig } from "../src/types.js";
@@ -147,9 +147,7 @@ describe("editFileTool", () => {
 	});
 
 	it("replace_all replaces all occurrences", async () => {
-		(mockEnv.read_file as ReturnType<typeof vi.fn>).mockResolvedValue(
-			"foo bar foo baz foo",
-		);
+		(mockEnv.read_file as ReturnType<typeof vi.fn>).mockResolvedValue("foo bar foo baz foo");
 		(mockEnv.write_file as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
 		const result = await editFileTool.execute(
@@ -163,17 +161,12 @@ describe("editFileTool", () => {
 			config,
 		);
 
-		expect(mockEnv.write_file).toHaveBeenCalledWith(
-			"/test/data.txt",
-			"qux bar qux baz qux",
-		);
+		expect(mockEnv.write_file).toHaveBeenCalledWith("/test/data.txt", "qux bar qux baz qux");
 		expect(result).toContain("replaced 3 occurrence(s)");
 	});
 
 	it("throws when old_string not found", async () => {
-		(mockEnv.read_file as ReturnType<typeof vi.fn>).mockResolvedValue(
-			"const a = 1;",
-		);
+		(mockEnv.read_file as ReturnType<typeof vi.fn>).mockResolvedValue("const a = 1;");
 
 		await expect(
 			editFileTool.execute(
@@ -238,10 +231,7 @@ describe("shellTool", () => {
 		);
 
 		// Should be clamped to max_command_timeout_ms (600_000)
-		expect(mockEnv.exec_command).toHaveBeenCalledWith(
-			"echo hello",
-			config.max_command_timeout_ms,
-		);
+		expect(mockEnv.exec_command).toHaveBeenCalledWith("echo hello", config.max_command_timeout_ms);
 		expect(result).toContain("Exit code: 0");
 	});
 
@@ -256,10 +246,7 @@ describe("shellTool", () => {
 
 		await shellTool.execute({ command: "ls" }, mockEnv, config);
 
-		expect(mockEnv.exec_command).toHaveBeenCalledWith(
-			"ls",
-			config.default_command_timeout_ms,
-		);
+		expect(mockEnv.exec_command).toHaveBeenCalledWith("ls", config.default_command_timeout_ms);
 	});
 
 	it("formats output with exit code, stdout, stderr", async () => {
@@ -271,11 +258,7 @@ describe("shellTool", () => {
 			duration_ms: 100,
 		});
 
-		const result = await shellTool.execute(
-			{ command: "ls" },
-			mockEnv,
-			config,
-		);
+		const result = await shellTool.execute({ command: "ls" }, mockEnv, config);
 
 		expect(result).toContain("Exit code: 0");
 		expect(result).toContain("--- stdout ---");
@@ -293,11 +276,7 @@ describe("shellTool", () => {
 			duration_ms: 10_000,
 		});
 
-		const result = await shellTool.execute(
-			{ command: "sleep 9999" },
-			mockEnv,
-			config,
-		);
+		const result = await shellTool.execute({ command: "sleep 9999" }, mockEnv, config);
 
 		expect(result).toContain("Command timed out");
 		expect(result).toContain(`${config.default_command_timeout_ms}ms`);
@@ -316,9 +295,7 @@ describe("grepTool", () => {
 	});
 
 	it("calls env.grep with correct options", async () => {
-		(mockEnv.grep as ReturnType<typeof vi.fn>).mockResolvedValue(
-			"file.ts:10:const foo = bar;",
-		);
+		(mockEnv.grep as ReturnType<typeof vi.fn>).mockResolvedValue("file.ts:10:const foo = bar;");
 
 		const result = await grepTool.execute(
 			{
@@ -386,11 +363,7 @@ describe("globTool", () => {
 	it("returns empty string when no matches", async () => {
 		(mockEnv.glob as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-		const result = await globTool.execute(
-			{ pattern: "**/*.xyz" },
-			mockEnv,
-			config,
-		);
+		const result = await globTool.execute({ pattern: "**/*.xyz" }, mockEnv, config);
 
 		expect(mockEnv.glob).toHaveBeenCalledWith("**/*.xyz", undefined);
 		expect(result).toBe("");
@@ -414,20 +387,16 @@ describe("applyPatchTool", () => {
 		const patch = [
 			"*** Begin Patch",
 			"*** Add File: src/new-file.ts",
-			"+export const greeting = \"hello\";",
-			"+export const farewell = \"goodbye\";",
+			'+export const greeting = "hello";',
+			'+export const farewell = "goodbye";',
 			"*** End Patch",
 		].join("\n");
 
-		const result = await applyPatchTool.execute(
-			{ patch },
-			mockEnv,
-			config,
-		);
+		const result = await applyPatchTool.execute({ patch }, mockEnv, config);
 
 		expect(mockEnv.write_file).toHaveBeenCalledWith(
 			"src/new-file.ts",
-			"export const greeting = \"hello\";\nexport const farewell = \"goodbye\";",
+			'export const greeting = "hello";\nexport const farewell = "goodbye";',
 		);
 		expect(result).toContain("Added file: src/new-file.ts");
 	});
@@ -435,17 +404,11 @@ describe("applyPatchTool", () => {
 	it("handles Delete File operation", async () => {
 		(mockEnv.write_file as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-		const patch = [
-			"*** Begin Patch",
-			"*** Delete File: src/old-file.ts",
-			"*** End Patch",
-		].join("\n");
-
-		const result = await applyPatchTool.execute(
-			{ patch },
-			mockEnv,
-			config,
+		const patch = ["*** Begin Patch", "*** Delete File: src/old-file.ts", "*** End Patch"].join(
+			"\n",
 		);
+
+		const result = await applyPatchTool.execute({ patch }, mockEnv, config);
 
 		expect(mockEnv.write_file).toHaveBeenCalledWith("src/old-file.ts", "");
 		expect(result).toContain("Deleted file: src/old-file.ts");
@@ -468,11 +431,7 @@ describe("applyPatchTool", () => {
 			"*** End Patch",
 		].join("\n");
 
-		const result = await applyPatchTool.execute(
-			{ patch },
-			mockEnv,
-			config,
-		);
+		const result = await applyPatchTool.execute({ patch }, mockEnv, config);
 
 		expect(mockEnv.read_file).toHaveBeenCalledWith("src/code.ts");
 		expect(mockEnv.write_file).toHaveBeenCalledWith(
@@ -484,28 +443,21 @@ describe("applyPatchTool", () => {
 	});
 
 	it("throws on empty patch with no operations", async () => {
-		const patch = [
-			"*** Begin Patch",
-			"*** End Patch",
-		].join("\n");
+		const patch = ["*** Begin Patch", "*** End Patch"].join("\n");
 
-		await expect(
-			applyPatchTool.execute({ patch }, mockEnv, config),
-		).rejects.toThrow("No operations found in patch");
+		await expect(applyPatchTool.execute({ patch }, mockEnv, config)).rejects.toThrow(
+			"No operations found in patch",
+		);
 	});
 
 	it("throws on patch missing Begin Patch header", async () => {
 		const patch = "just some text without patch markers";
 
-		await expect(
-			applyPatchTool.execute({ patch }, mockEnv, config),
-		).rejects.toThrow("Begin Patch");
+		await expect(applyPatchTool.execute({ patch }, mockEnv, config)).rejects.toThrow("Begin Patch");
 	});
 
 	it("handles Move to operation", async () => {
-		(mockEnv.read_file as ReturnType<typeof vi.fn>).mockResolvedValue(
-			"original content\n",
-		);
+		(mockEnv.read_file as ReturnType<typeof vi.fn>).mockResolvedValue("original content\n");
 		(mockEnv.write_file as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
 		const patch = [
@@ -517,16 +469,9 @@ describe("applyPatchTool", () => {
 			"*** End Patch",
 		].join("\n");
 
-		const result = await applyPatchTool.execute(
-			{ patch },
-			mockEnv,
-			config,
-		);
+		const result = await applyPatchTool.execute({ patch }, mockEnv, config);
 
-		expect(mockEnv.write_file).toHaveBeenCalledWith(
-			"src/new-name.ts",
-			"original content\n",
-		);
+		expect(mockEnv.write_file).toHaveBeenCalledWith("src/new-name.ts", "original content\n");
 		expect(result).toContain("moved file");
 		expect(result).toContain("src/old-name.ts");
 		expect(result).toContain("src/new-name.ts");

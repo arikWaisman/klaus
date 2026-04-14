@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { detectLoop, loopWarningMessage } from "../src/loop-detection.js";
 import type { ToolCallInfo } from "../src/types.js";
 
@@ -32,9 +32,7 @@ describe("detectLoop", () => {
 	});
 
 	it("detects pattern length 1 (same call repeated 10 times)", () => {
-		const calls = Array.from({ length: 10 }, () =>
-			call("Bash", { command: "cat /dev/null" }),
-		);
+		const calls = Array.from({ length: 10 }, () => call("Bash", { command: "cat /dev/null" }));
 		expect(detectLoop(calls)).toBe(1);
 	});
 
@@ -70,18 +68,14 @@ describe("detectLoop", () => {
 	it("does not detect loop with insufficient repeats", () => {
 		// Only 3 repetitions of a single call with windowSize=10
 		// needs repeats >= floor(10/1) - 1 = 9, but only 3 available
-		const calls = Array.from({ length: 3 }, () =>
-			call("Bash", { command: "echo hi" }),
-		);
+		const calls = Array.from({ length: 3 }, () => call("Bash", { command: "echo hi" }));
 		expect(detectLoop(calls)).toBe(0);
 	});
 
 	it("respects windowSize parameter", () => {
 		// Create 6 identical calls -- with windowSize=6 the threshold is
 		// floor(6/1) - 1 = 5 repeats, and 6 identical calls give 5 repeats
-		const calls = Array.from({ length: 6 }, () =>
-			call("Bash", { command: "echo loop" }),
-		);
+		const calls = Array.from({ length: 6 }, () => call("Bash", { command: "echo loop" }));
 		expect(detectLoop(calls, 6)).toBe(1);
 
 		// With a larger window, the same 6 calls won't be enough
@@ -122,9 +116,7 @@ describe("detectLoop", () => {
 			call("Bash", { command: "make" }),
 			call("Grep", { pattern: "foo" }),
 		];
-		const looping = Array.from({ length: 10 }, () =>
-			call("Bash", { command: "retry" }),
-		);
+		const looping = Array.from({ length: 10 }, () => call("Bash", { command: "retry" }));
 		expect(detectLoop([...diverse, ...looping])).toBe(1);
 	});
 });

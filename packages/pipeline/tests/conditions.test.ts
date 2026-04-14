@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { evaluateCondition, validateCondition } from "../src/conditions.js";
 import { Context } from "../src/context.js";
 import type { Outcome } from "../src/types.js";
@@ -51,18 +51,16 @@ describe("evaluateCondition", () => {
 		const ctx = new Context();
 		ctx.set("env", "production");
 		const outcome = makeOutcome({ status: "success" });
-		expect(
-			evaluateCondition("outcome=success && context.env=production", ctx, outcome),
-		).toBe(true);
+		expect(evaluateCondition("outcome=success && context.env=production", ctx, outcome)).toBe(true);
 	});
 
 	it("&& conjunction — fails if one clause is false", () => {
 		const ctx = new Context();
 		ctx.set("env", "staging");
 		const outcome = makeOutcome({ status: "success" });
-		expect(
-			evaluateCondition("outcome=success && context.env=production", ctx, outcome),
-		).toBe(false);
+		expect(evaluateCondition("outcome=success && context.env=production", ctx, outcome)).toBe(
+			false,
+		);
 	});
 
 	it("missing context key resolves to empty string", () => {
@@ -78,6 +76,34 @@ describe("evaluateCondition", () => {
 		const outcome = makeOutcome();
 		expect(evaluateCondition('context.greeting="hello world"', ctx, outcome)).toBe(true);
 		expect(evaluateCondition('context.greeting="goodbye"', ctx, outcome)).toBe(false);
+	});
+
+	it("~= (contains) matches substring", () => {
+		const ctx = new Context();
+		ctx.set("response", "Everything looks good. CONSENSUS_REACHED. Done.");
+		const outcome = makeOutcome();
+		expect(evaluateCondition("context.response~=CONSENSUS_REACHED", ctx, outcome)).toBe(true);
+		expect(evaluateCondition("context.response~=NOPE", ctx, outcome)).toBe(false);
+	});
+
+	it("!~= (not contains) matches absence of substring", () => {
+		const ctx = new Context();
+		ctx.set("response", "There are issues to fix.");
+		const outcome = makeOutcome();
+		expect(evaluateCondition("context.response!~=CONSENSUS_REACHED", ctx, outcome)).toBe(true);
+		expect(evaluateCondition("context.response!~=issues", ctx, outcome)).toBe(false);
+	});
+
+	it("~= works with && clauses", () => {
+		const ctx = new Context();
+		ctx.set("result", "CONSENSUS_REACHED");
+		const outcome = makeOutcome({ status: "success" });
+		expect(
+			evaluateCondition("outcome=success && context.result~=CONSENSUS", ctx, outcome),
+		).toBe(true);
+		expect(
+			evaluateCondition("outcome=fail && context.result~=CONSENSUS", ctx, outcome),
+		).toBe(false);
 	});
 });
 

@@ -20,10 +20,19 @@ export function evaluateCondition(
 
 function evaluateClause(clause: string, context: PipelineContext, outcome: Outcome): boolean {
 	// Try to parse: key operator literal
-	let operator: "=" | "!=";
+	// Supported operators: =, !=, ~= (contains), !~= (not contains)
+	let operator: "=" | "!=" | "~=" | "!~=";
 	let parts: [string, string];
 
-	if (clause.includes("!=")) {
+	if (clause.includes("!~=")) {
+		operator = "!~=";
+		const idx = clause.indexOf("!~=");
+		parts = [clause.slice(0, idx).trim(), clause.slice(idx + 3).trim()];
+	} else if (clause.includes("~=")) {
+		operator = "~=";
+		const idx = clause.indexOf("~=");
+		parts = [clause.slice(0, idx).trim(), clause.slice(idx + 2).trim()];
+	} else if (clause.includes("!=")) {
 		operator = "!=";
 		const idx = clause.indexOf("!=");
 		parts = [clause.slice(0, idx).trim(), clause.slice(idx + 2).trim()];
@@ -40,8 +49,16 @@ function evaluateClause(clause: string, context: PipelineContext, outcome: Outco
 	const actual = String(resolveKey(key, context, outcome) ?? "");
 	const expected = parseLiteral(literal);
 
-	if (operator === "=") return actual === expected;
-	return actual !== expected;
+	switch (operator) {
+		case "=":
+			return actual === expected;
+		case "!=":
+			return actual !== expected;
+		case "~=":
+			return actual.includes(expected);
+		case "!~=":
+			return !actual.includes(expected);
+	}
 }
 
 function resolveKey(key: string, context: PipelineContext, outcome: Outcome): unknown {
@@ -72,9 +89,9 @@ export function validateCondition(condition: string): string | null {
 
 	for (const clause of clauses) {
 		if (!clause) return `Empty clause in condition: "${condition}"`;
-		// Must contain = or !=
+		// Must contain an operator (=, !=, ~=, !~=)
 		if (!clause.includes("=")) {
-			return `Clause missing operator (= or !=): "${clause}"`;
+			return `Clause missing operator (=, !=, ~=, !~=): "${clause}"`;
 		}
 	}
 
