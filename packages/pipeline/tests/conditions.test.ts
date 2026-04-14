@@ -98,12 +98,12 @@ describe("evaluateCondition", () => {
 		const ctx = new Context();
 		ctx.set("result", "CONSENSUS_REACHED");
 		const outcome = makeOutcome({ status: "success" });
-		expect(
-			evaluateCondition("outcome=success && context.result~=CONSENSUS", ctx, outcome),
-		).toBe(true);
-		expect(
-			evaluateCondition("outcome=fail && context.result~=CONSENSUS", ctx, outcome),
-		).toBe(false);
+		expect(evaluateCondition("outcome=success && context.result~=CONSENSUS", ctx, outcome)).toBe(
+			true,
+		);
+		expect(evaluateCondition("outcome=fail && context.result~=CONSENSUS", ctx, outcome)).toBe(
+			false,
+		);
 	});
 });
 

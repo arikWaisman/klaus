@@ -88,13 +88,12 @@ describe("detectLoop", () => {
 			// Alternate between two key orderings of the same object
 			if (i % 2 === 0) {
 				return call("Write", { path: "/x", content: "y" });
-			} else {
-				// Create with different key order -- construct manually
-				const args: Record<string, unknown> = {};
-				args["content"] = "y";
-				args["path"] = "/x";
-				return call("Write", args);
 			}
+			// Create with different key order -- construct manually
+			const args: Record<string, unknown> = {};
+			args.content = "y";
+			args.path = "/x";
+			return call("Write", args);
 		});
 		// All calls should produce the same signature due to sorted keys
 		expect(detectLoop(calls)).toBe(1);

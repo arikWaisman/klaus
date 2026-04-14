@@ -177,7 +177,7 @@ describe("LocalExecutionEnvironment", () => {
 				expect(result.stdout.trim()).not.toBe("super-secret-value");
 			} finally {
 				if (original === undefined) {
-					delete process.env.MY_API_KEY;
+					process.env.MY_API_KEY = undefined;
 				} else {
 					process.env.MY_API_KEY = original;
 				}

@@ -55,7 +55,7 @@ You describe the work
 ### Install and Build
 
 ```bash
-git clone <this-repo> && cd klaus
+git clone https://github.com/arikWaisman/klaus.git && cd klaus
 pnpm install
 pnpm build
 ```
@@ -291,7 +291,7 @@ This creates edges: Start->Plan, Plan->Implement, Implement->Test, Test->End.
 
 ## Included Pipelines
 
-Klaus ships with three starter pipelines in `pipelines/`:
+Klaus ships with four starter pipelines in `pipelines/`:
 
 ### `quick-start.dot`
 
@@ -373,16 +373,16 @@ import { Client, generate, stream, generate_object } from "@klaus/llm-client";
 
 const client = Client.fromEnv();
 
-// Simple completion
+// Simple completion — model is optional (falls back to provider default)
 const response = await client.complete({
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-5-20250929",  // or omit for provider default
   messages: [{ role: "user", content: [{ kind: "text", text: "Hello" }] }],
 });
 
 // High-level generate with tool execution loop
 const result = await generate({
   client,
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-5-20250929",  // optional — any model string works
   prompt: "What's the weather in SF?",
   tools: [{
     name: "get_weather",
