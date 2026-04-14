@@ -1,0 +1,14 @@
+digraph QuickStart {
+	graph [
+		goal="Complete a coding task"
+		label="Quick Start Pipeline"
+	]
+
+	Start [shape=Mdiamond]
+	Plan [shape=box, prompt="Analyze the codebase and create a plan for: $goal"]
+	Implement [shape=box, prompt="Implement the plan from the previous step for: $goal"]
+	Verify [shape=box, prompt="Run tests and verify the implementation is correct. Fix any issues found."]
+	End [shape=Msquare]
+
+	Start -> Plan -> Implement -> Verify -> End
+}

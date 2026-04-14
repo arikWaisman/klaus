@@ -1,0 +1,42 @@
+digraph PlanAndExecute {
+	graph [
+		goal="Complete the task"
+		label="Plan, Execute, and Validate"
+		default_max_retries=2
+	]
+
+	Start [shape=Mdiamond]
+
+	// Planning phase
+	Plan [shape=box, prompt="Analyze the codebase and create a detailed implementation plan for: $goal. List the files to change, the approach, and any risks."]
+
+	// Human review gate
+	Review [shape=hexagon, prompt="Review the plan. Approve or reject?"]
+
+	// Implementation
+	Implement [shape=box, prompt="Execute the implementation plan. Make all necessary code changes for: $goal", goal_gate=true]
+
+	// Validation
+	Test [shape=parallelogram, tool_command="pnpm test", timeout="120s"]
+	Lint [shape=parallelogram, tool_command="pnpm lint", timeout="30s"]
+
+	// Check results
+	CheckResults [shape=diamond]
+
+	// Fix issues if needed
+	Fix [shape=box, prompt="The tests or linter failed. Analyze the errors and fix the issues.", max_retries=3]
+
+	End [shape=Msquare]
+
+	Start -> Plan
+	Plan -> Review
+	Review -> Plan [label="Reject", condition="preferred_label=Reject"]
+	Review -> Implement [label="Approve"]
+	Implement -> Test
+	Test -> Lint [condition="outcome=success"]
+	Test -> Fix [condition="outcome=fail"]
+	Lint -> CheckResults
+	CheckResults -> End [condition="outcome=success"]
+	CheckResults -> Fix [condition="outcome=fail"]
+	Fix -> Test
+}

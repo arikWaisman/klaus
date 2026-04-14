@@ -1,0 +1,23 @@
+{
+	"name": "@klaus/cli",
+	"version": "0.1.0",
+	"type": "module",
+	"bin": {
+		"klaus": "./dist/cli.js"
+	},
+	"files": ["dist"],
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch"
+	},
+	"dependencies": {
+		"@klaus/llm-client": "workspace:*",
+		"@klaus/agent-loop": "workspace:*",
+		"@klaus/pipeline": "workspace:*",
+		"commander": "^13.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^25.5.0",
+		"tsup": "^8.0.0"
+	}
+}

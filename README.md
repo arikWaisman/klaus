@@ -1,41 +1,347 @@
 # Klaus
 
-A TypeScript implementation of the [Attractor](https://github.com/strongdm/attractor) software factory system.
+A TypeScript implementation of the [Attractor](https://github.com/strongdm/attractor) software factory system. Klaus provides a DOT-based pipeline runner for orchestrating multi-stage AI workflows, a programmable coding agent loop for autonomous code generation, and a unified LLM client supporting Anthropic, OpenAI, and Gemini.
 
-## Packages
+## What is Klaus?
 
-| Package | Description | Status |
-|---------|-------------|--------|
-| [`@klaus/llm-client`](packages/llm-client) | Unified LLM client for Anthropic, OpenAI, and Gemini | Done |
-| [`@klaus/agent-loop`](packages/agent-loop) | Coding agent loop | Done |
-| [`@klaus/pipeline`](packages/pipeline) | DOT-based pipeline runner | Done |
+Klaus is a software factory. You describe a workflow as a [Graphviz DOT](https://graphviz.org/doc/info/lang.html) file — nodes are tasks, edges are transitions — and Klaus executes it. Each node can be an LLM-powered coding agent, a shell command, a human approval gate, a conditional branch, or a parallel fan-out. The pipeline engine walks the graph from start to exit, running handlers at each node, routing along edges based on outcomes and conditions.
+
+Klaus integrates with [Claude Code](https://claude.com/claude-code) via skills. You can plan a sprint, generate a `.dot` pipeline, and execute it — all from within your AI coding environment.
+
+## How It Works
+
+The typical workflow:
+
+1. **Open Claude Code** in the project you want to work on
+2. **Plan the work** — use the `sprint-plan` skill to analyze your project, generate a plan, and produce a `.dot` pipeline file
+3. **Execute the pipeline** — use `klaus run` to walk the graph, running each node through the appropriate handler (LLM agent, shell command, human gate, etc.)
+4. **Review and iterate** — human gates in the pipeline let you approve, reject, or redirect at key decision points
+
+```
+You describe the work
+        |
+        v
+  sprint-plan skill generates a .dot pipeline
+        |
+        v
+  klaus run executes the pipeline
+        |
+        v
+  ┌─────────────────────────────────────────┐
+  │  Start                                  │
+  │    ↓                                    │
+  │  Plan (LLM analyzes codebase)           │
+  │    ↓                                    │
+  │  Review (human approves/rejects)        │
+  │    ↓                                    │
+  │  Implement (LLM writes code)            │
+  │    ↓                                    │
+  │  Test (shell: pnpm test)                │
+  │    ↓                                    │
+  │  Fix loop if tests fail                 │
+  │    ↓                                    │
+  │  End                                    │
+  └─────────────────────────────────────────┘
+```
 
 ## Quick Start
 
+### Prerequisites
+
+- Node.js >= 22
+- pnpm
+- At least one LLM API key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`
+
+### Install and Build
+
 ```bash
+git clone <this-repo> && cd klaus
 pnpm install
 pnpm build
-pnpm test
 ```
 
-## @klaus/llm-client
+### Install Skills
 
-Provider-agnostic LLM client supporting Anthropic Messages API, OpenAI Responses API, and Gemini native API through a unified interface.
-
-### Setup
+Klaus uses [Claude Code skills](https://github.com/strongdm/skills) for sprint planning and execution. Install them into your project:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
-export GEMINI_API_KEY=AI...
+# From within your project directory:
+pnpm klaus skills install
+
+# Or manually:
+npx skills add strongdm/skills
 ```
 
-### Usage
+This installs two skills into `.claude/skills/`:
+
+| Skill | What it does |
+|-------|-------------|
+| `sprint-plan` | Multi-agent sprint planning with competitive drafting across Claude, Codex, and Gemini. Produces an implementation plan and a `.dot` pipeline file. |
+| `sprint-execute` | Executes a sprint document phase-by-phase with build/test validation at each step. |
+
+### Run a Pipeline
+
+```bash
+# Set your API key(s)
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Validate a pipeline file
+pnpm klaus validate pipelines/quick-start.dot
+
+# Run a pipeline
+pnpm klaus run pipelines/quick-start.dot
+
+# Run with options
+pnpm klaus run pipelines/plan-and-execute.dot \
+  --model claude-sonnet-4-5-20250929 \
+  --auto-approve
+```
+
+## CLI Reference
+
+```
+klaus [command] [options]
+
+Commands:
+  run <file.dot>       Run a DOT pipeline
+  validate <file.dot>  Validate a DOT pipeline file
+  skills check         Check if required skills are installed
+  skills install       Install skills from strongdm/skills
+```
+
+### `klaus run`
+
+Execute a DOT pipeline from start to exit.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-m, --model <model>` | `claude-sonnet-4-5-20250929` | Default LLM model for codergen nodes |
+| `--auto-approve` | `false` | Skip human approval gates (auto-approve all) |
+| `--logs <dir>` | `/tmp/klaus-logs` | Directory for pipeline execution logs |
+| `-q, --quiet` | `false` | Suppress event logging output |
+
+The engine prints events as the pipeline runs:
+
+```
+[12:34:56] Pipeline started: PlanAndExecute
+[12:34:56] -> Start
+[12:34:56]    done (1ms)
+[12:34:56] -> Plan
+[12:35:12]    done (16204ms)
+[12:35:12] -> Review
+[12:35:18]    done (5801ms)
+[12:35:18] -> Implement
+[12:36:45]    done (87102ms)
+[12:36:45] -> Test
+[12:36:52]    done (6891ms)
+
+[12:36:52] Pipeline completed (116002ms)
+```
+
+### `klaus validate`
+
+Parse and validate a `.dot` file without executing it. Reports errors and warnings:
+
+- Missing start or exit node
+- Unreachable nodes
+- Invalid edge conditions
+- Codergen nodes missing prompts
+- Multiple start/exit nodes
+
+### `klaus skills`
+
+Manage Claude Code skill installation.
+
+- `klaus skills check` — reports which skills are installed and which are missing
+- `klaus skills install` — runs `npx skills add strongdm/skills` to install sprint-plan and sprint-execute
+
+## Writing Pipeline Files
+
+Pipeline files use [Graphviz DOT](https://graphviz.org/doc/info/lang.html) syntax with custom attributes. A pipeline is a `digraph` with nodes (tasks) and edges (transitions).
+
+### Minimal Example
+
+```dot
+digraph MyPipeline {
+  graph [goal="Add input validation to the API"]
+
+  Start [shape=Mdiamond]
+  Implement [shape=box, prompt="Add input validation to all API endpoints for: $goal"]
+  End [shape=Msquare]
+
+  Start -> Implement -> End
+}
+```
+
+### Node Types
+
+Nodes are typed by their `shape` attribute. Each shape maps to a built-in handler:
+
+| Shape | Type | What it does |
+|-------|------|-------------|
+| `Mdiamond` | `start` | Entry point. Every pipeline needs exactly one. |
+| `Msquare` | `exit` | Exit point. Every pipeline needs exactly one. |
+| `box` | `codergen` | LLM coding agent. Reads the `prompt` attribute, calls the LLM with full tool access (read/write/edit/shell/grep/glob). This is where code gets written. |
+| `parallelogram` | `tool` | Shell command. Reads the `tool_command` attribute and executes it. Use for running tests, linters, build commands. |
+| `hexagon` | `wait.human` | Human gate. Presents the outgoing edge labels as choices and waits for input. Use for approval steps. |
+| `diamond` | `conditional` | Conditional router. Does nothing itself — the engine evaluates `condition` attributes on outgoing edges to pick the next node. |
+| `component` | `parallel` | Parallel fan-out. All outgoing edges execute concurrently. |
+| `tripleoctagon` | `parallel.fan_in` | Fan-in join. Waits for parallel branches to complete, merges results. |
+| `house` | `stack.manager_loop` | Supervisor pattern for iterative refinement. |
+
+You can also set the type explicitly with the `type` attribute: `MyNode [type="codergen", prompt="..."]`.
+
+### Node Attributes
+
+| Attribute | Applies to | Description |
+|-----------|-----------|-------------|
+| `prompt` | `codergen` | The instruction sent to the LLM. Use `$goal` to reference the pipeline's graph-level goal. |
+| `tool_command` | `tool` | Shell command to execute. |
+| `timeout` | `tool` | Command timeout. Supports `ms`, `s`, `m`, `h`, `d` suffixes. Default: `30s`. |
+| `llm_model` | `codergen` | Override the LLM model for this node. E.g., `llm_model="claude-opus-4-5-20250929"`. |
+| `llm_provider` | `codergen` | Override the LLM provider. |
+| `max_retries` | any | Number of retry attempts if the node fails. |
+| `goal_gate` | any | If `true`, this node must complete successfully before the pipeline can exit. |
+| `label` | any | Display label. For `wait.human`, shown as the prompt text. |
+
+### Edge Attributes
+
+| Attribute | Description |
+|-----------|-------------|
+| `condition` | Expression that must evaluate to true for this edge to be taken. See Condition Expressions below. |
+| `label` | Edge label. Used for preferred-label matching and displayed in human gates. |
+| `weight` | Numeric tiebreaker. Higher weight = preferred when multiple edges match. |
+
+### Condition Expressions
+
+Conditions on edges control routing. The engine evaluates them against the pipeline context and the last node's outcome.
+
+```dot
+// Route based on outcome status
+NodeA -> NodeB [condition="outcome=success"]
+NodeA -> NodeC [condition="outcome=fail"]
+
+// Route based on context values
+Check -> Deploy [condition="context.quality=high"]
+Check -> Fix [condition="context.quality=low"]
+
+// Route based on preferred label from human gates
+Review -> Implement [label="Approve"]
+Review -> Plan [label="Reject", condition="preferred_label=Reject"]
+
+// Combine with && (AND)
+Gate -> Deploy [condition="outcome=success && context.tests_pass=true"]
+```
+
+Supported operators: `=` (equals), `!=` (not equals), `&&` (and).
+
+### Edge Selection Algorithm
+
+When a node completes, the engine picks the next edge using a 5-step priority:
+
+1. **Condition match** — first edge whose `condition` evaluates to true
+2. **Preferred label** — match the outcome's `preferred_label` to an edge's `label`
+3. **Suggested next IDs** — match the outcome's `suggested_next_ids` to edge targets
+4. **Weight** — highest `weight` attribute wins
+5. **Lexical** — alphabetical by target node ID (final tiebreak)
+
+### Graph-Level Attributes
+
+Set these on the `graph` to configure the whole pipeline:
+
+```dot
+digraph MyPipeline {
+  graph [
+    goal="The overall objective"
+    label="Human-readable pipeline name"
+    default_max_retries=2
+  ]
+  // ...
+}
+```
+
+| Attribute | Description |
+|-----------|-------------|
+| `goal` | The pipeline's objective. Available as `$goal` in node prompts and as `graph.goal` in the context. |
+| `label` | Display name for the pipeline. |
+| `default_max_retries` | Default retry count for all nodes (can be overridden per-node). |
+| `model_stylesheet` | CSS-like model configuration. See Model Stylesheets below. |
+| `default_fidelity` | Default fidelity mode for context passing between nodes. |
+
+### Chained Edges
+
+You can chain edges for linear sequences:
+
+```dot
+Start -> Plan -> Implement -> Test -> End
+```
+
+This creates edges: Start->Plan, Plan->Implement, Implement->Test, Test->End.
+
+## Included Pipelines
+
+Klaus ships with three starter pipelines in `pipelines/`:
+
+### `quick-start.dot`
+
+The simplest pipeline. Three LLM nodes in sequence:
+
+```
+Start -> Plan -> Implement -> Verify -> End
+```
+
+Use this to get started or as a template for simple tasks.
+
+### `plan-and-execute.dot`
+
+A full development workflow with human review and test validation:
+
+```
+Start -> Plan -> Review (human) -> Implement -> Test -> Lint -> CheckResults -> End
+                   |                                              |
+                   <- Reject                                Fix <-
+```
+
+- **Plan**: LLM analyzes the codebase and creates an implementation plan
+- **Review**: Human approves or rejects the plan (loops back to Plan on reject)
+- **Implement**: LLM executes the plan (marked as a goal gate)
+- **Test + Lint**: Shell commands run the test suite and linter
+- **Fix loop**: If tests or lint fail, an LLM agent fixes the issues and re-runs
+
+### `multi-model-review.dot`
+
+Implementation with cross-model code review:
+
+```
+Start -> Implement (Claude) -> Review (Claude) -> Test -> Check -> End
+                                                           |
+                                                     Fix <-
+```
+
+- **Implement**: Primary implementation with a specified model
+- **Review**: A second model reviews the code for bugs, security issues, and style
+- **Test gate**: Shell command runs tests, loops through Fix if they fail
+
+## Packages
+
+Klaus is a pnpm monorepo with four packages:
+
+| Package | Description |
+|---------|-------------|
+| [`@klaus/cli`](packages/cli) | CLI for running and validating pipelines, managing skills |
+| [`@klaus/pipeline`](packages/pipeline) | DOT parser, execution engine, built-in handlers, validation |
+| [`@klaus/agent-loop`](packages/agent-loop) | Coding agent loop with provider-aligned profiles and tools |
+| [`@klaus/llm-client`](packages/llm-client) | Unified LLM client for Anthropic, OpenAI, and Gemini |
+
+Dependencies flow in one direction: `cli` -> `pipeline` -> `agent-loop` -> `llm-client`.
+
+### @klaus/llm-client
+
+Provider-agnostic LLM client. Each provider uses its native API — Anthropic Messages API, OpenAI Responses API, Gemini native API — with a unified `Request`/`Response`/`StreamEvent` interface.
 
 ```ts
-import { Client, generate, stream } from "@klaus/llm-client";
+import { Client, generate, stream, generate_object } from "@klaus/llm-client";
 
-// Auto-detect providers from environment variables
 const client = Client.fromEnv();
 
 // Simple completion
@@ -68,9 +374,7 @@ for await (const text of s.text_stream) {
 }
 
 // Structured output with Zod validation
-import { generate_object } from "@klaus/llm-client";
 import { z } from "zod";
-
 const obj = await generate_object({
   client,
   model: "gpt-4o-mini",
@@ -80,36 +384,24 @@ const obj = await generate_object({
 console.log(obj.output); // { name: "John", age: 30 }
 ```
 
-### Features
+**Provider routing** — the client routes automatically based on model name:
 
-- **Three providers**: Anthropic, OpenAI, Gemini — each using their native API
-- **Unified types**: Single `Request`/`Response`/`StreamEvent` model across all providers
-- **Tool execution**: Automatic tool call loop with `Promise.allSettled` concurrency
-- **Structured output**: `generate_object()` and `stream_object()` with Zod validation
-- **Streaming**: `AsyncIterableIterator<StreamEvent>` with `text_stream` convenience
-- **Retry**: Exponential backoff with jitter, Retry-After header support
-- **Middleware**: Composable onion-model middleware (logging, caching, etc.)
-- **Model catalog**: Built-in model info with `registerModel()` for custom entries
-- **Dual output**: ESM + CJS with TypeScript declarations
-
-### Provider Routing
-
-The client routes requests automatically based on model name:
-
-- `claude-*` → Anthropic
-- `gpt-*`, `o1-*`, `o3-*` → OpenAI
-- `gemini-*` → Gemini
+| Pattern | Provider |
+|---------|----------|
+| `claude-*` | Anthropic |
+| `gpt-*`, `o1-*`, `o3-*` | OpenAI |
+| `gemini-*` | Gemini |
 
 Or set `provider` explicitly on any request.
 
-## @klaus/agent-loop
+**Features**: unified types, automatic tool call loop with `Promise.allSettled`, `generate_object()` / `stream_object()` with Zod, retry with exponential backoff + jitter + Retry-After, composable onion-model middleware, built-in model catalog, ESM + CJS output.
 
-Provider-aligned coding agent loop with tool execution, output truncation, loop detection, and steering.
+### @klaus/agent-loop
 
-### Usage
+Programmable coding agent loop. The host application controls session lifecycle, observes events, steers mid-task, and composes subagents.
 
 ```ts
-import { Session, LocalExecutionEnvironment, anthropicProfile } from "@klaus/agent-loop";
+import { Session, LocalExecutionEnvironment, createAnthropicProfile } from "@klaus/agent-loop";
 import { Client } from "@klaus/llm-client";
 
 const client = Client.fromEnv();
@@ -117,67 +409,164 @@ const env = new LocalExecutionEnvironment("/path/to/project");
 await env.initialize();
 
 const session = new Session({
-  profile: anthropicProfile(),
+  profile: createAnthropicProfile("claude-sonnet-4-5-20250929"),
   client,
   environment: env,
   config: { max_turns: 10 },
 });
 
-const outcome = await session.process_input("Add error handling to the API routes");
-console.log(outcome.response); // Assistant's response
+await session.process_input("Add error handling to the API routes");
+session.close();
 ```
 
-### Features
+**Provider profiles** align tools and system prompts to each provider's native agent:
 
-- **Provider-aligned profiles**: Anthropic (Claude Code), OpenAI (codex-rs), and Gemini (gemini-cli)
-- **7 built-in tools**: read_file, write_file, edit_file, shell, grep, glob, apply_patch
-- **Output truncation**: Character-first then line-based, per-tool defaults
-- **Loop detection**: Detects repeating tool call patterns (window of 10)
-- **Steering & follow-up**: Inject messages into the conversation mid-turn
-- **Event system**: Typed events with async iterator support
-- **Execution environment**: Sandboxed file I/O and command execution with process groups
+| Profile | Aligned to | Tools |
+|---------|-----------|-------|
+| Anthropic | Claude Code | read_file, write_file, edit_file, shell, grep, glob |
+| OpenAI | codex-rs | read_file, write_file, apply_patch, shell, grep, glob |
+| Gemini | gemini-cli | read_file, write_file, edit_file, shell, grep, glob |
 
-## @klaus/pipeline
+**Features**: 7 built-in tools, character-first then line-based output truncation, loop detection (repeating pattern window of 10), steering and follow-up message injection, typed event system with async iterator, sandboxed execution environment with process groups.
 
-DOT-based pipeline runner for defining and executing multi-stage workflows.
+### @klaus/pipeline
 
-### Usage
+DOT-based pipeline runner. Parses Graphviz DOT syntax into an executable graph and walks it from start to exit.
 
 ```ts
 import { PipelineEngine } from "@klaus/pipeline";
 
-const dot = `
-  digraph deploy {
-    goal = "Deploy the service"
-    Start [shape=Mdiamond]
-    Build [prompt="Build the project"]
-    Test [prompt="Run test suite"]
-    Deploy [prompt="Deploy to production"]
-    End [shape=Msquare]
-
-    Start -> Build -> Test -> Deploy -> End
-  }
-`;
-
 const engine = new PipelineEngine({
-  dot,
+  dot: fs.readFileSync("pipeline.dot", "utf-8"),
   backend: myCodergenBackend,
+  interviewer: myInterviewer, // optional, defaults to auto-approve
+  on_event: (event) => console.log(event.kind),
 });
 
 const outcome = await engine.run();
+// outcome.status: "success" | "fail" | "partial_success" | "retry" | "skipped"
 ```
 
-### Features
+**The `CodergenBackend` interface** is how the engine calls LLMs:
 
-- **DOT parser**: Full digraph parsing with attributes, subgraphs, and chained edges
-- **9 built-in handlers**: start, exit, codergen, wait.human, conditional, parallel, fan_in, tool, manager_loop
-- **5-step edge selection**: condition → preferred label → suggested IDs → weight → lexical
-- **Model stylesheets**: CSS-like selectors for node LLM configuration
-- **Condition expressions**: `outcome=success`, `context.key!=value`, `&&` conjunction
-- **Retry with backoff**: Exponential backoff with jitter, per-node or graph-level config
-- **Checkpoints**: Serialize/resume pipeline state
-- **Interviewer abstraction**: Human-in-the-loop decision points
-- **Graph validation**: Start/exit nodes, reachability, condition syntax
+```ts
+interface CodergenBackend {
+  run(node: Node, prompt: string, context: PipelineContext): Promise<string | Outcome>;
+}
+```
+
+The CLI's built-in backend creates a fresh `@klaus/agent-loop` Session for each codergen node, giving each node full tool access (file I/O, shell, grep, glob).
+
+**The `Interviewer` interface** handles human-in-the-loop gates:
+
+```ts
+interface Interviewer {
+  ask(question: Question): Promise<Answer>;
+  inform?(message: string, stage: string): Promise<void>;
+}
+```
+
+The CLI provides a `ConsoleInterviewer` (reads from stdin) and an auto-approve mode.
+
+**Features**: full DOT parser with attributes/subgraphs/chained edges, 9 built-in handlers, 5-step edge selection, model stylesheets, condition expressions, retry with exponential backoff + jitter, checkpoint serialization for pause/resume, graph validation, event stream.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  @klaus/cli                                                      │
+│  CLI entry point — run, validate, skills                         │
+├──────────────────────────────────────────────────────────────────┤
+│  @klaus/pipeline                                                 │
+│  DOT parser | Execution engine | Handlers | Validation           │
+├──────────────────────────────────────────────────────────────────┤
+│  @klaus/agent-loop                                               │
+│  Session | Provider profiles | Tool registry | Truncation        │
+├──────────────────────────────────────────────────────────────────┤
+│  @klaus/llm-client                                               │
+│  Client | Adapters (Anthropic, OpenAI, Gemini) | Middleware      │
+│  generate() | stream() | generate_object() | Retry               │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## Using Klaus with Claude Code
+
+The most common way to use Klaus is through Claude Code with the installed skills.
+
+### Planning a Sprint
+
+Open Claude Code in your project and describe what you want to build. The `sprint-plan` skill will:
+
+1. Orient to your project's current state (codebase, git history, open issues)
+2. Generate competitive drafts from multiple models (Claude, Codex, Gemini)
+3. Cross-critique each draft
+4. Interview you to resolve ambiguities
+5. Produce a final sprint document and a `.dot` pipeline file
+
+### Executing a Sprint
+
+Once you have a sprint document or `.dot` file, the `sprint-execute` skill will work through it phase-by-phase with build/test validation gates.
+
+Alternatively, run the pipeline directly:
+
+```bash
+pnpm klaus run my-sprint.dot
+```
+
+### Writing Custom Pipelines
+
+You can write `.dot` files by hand or have Claude generate them. Here's a template for common patterns:
+
+**Linear pipeline** (do A, then B, then C):
+
+```dot
+digraph Linear {
+  graph [goal="..."]
+  Start [shape=Mdiamond]
+  A [shape=box, prompt="..."]
+  B [shape=box, prompt="..."]
+  C [shape=box, prompt="..."]
+  End [shape=Msquare]
+  Start -> A -> B -> C -> End
+}
+```
+
+**Pipeline with test gate** (implement, test, fix loop):
+
+```dot
+digraph WithTests {
+  graph [goal="..."]
+  Start [shape=Mdiamond]
+  Implement [shape=box, prompt="..."]
+  Test [shape=parallelogram, tool_command="pnpm test"]
+  Check [shape=diamond]
+  Fix [shape=box, prompt="Tests failed. Fix the issues.", max_retries=3]
+  End [shape=Msquare]
+
+  Start -> Implement -> Test -> Check
+  Check -> End [condition="outcome=success"]
+  Check -> Fix [condition="outcome=fail"]
+  Fix -> Test
+}
+```
+
+**Pipeline with human approval**:
+
+```dot
+digraph WithApproval {
+  graph [goal="..."]
+  Start [shape=Mdiamond]
+  Draft [shape=box, prompt="..."]
+  Review [shape=hexagon, prompt="Approve this change?"]
+  Apply [shape=box, prompt="..."]
+  End [shape=Msquare]
+
+  Start -> Draft -> Review
+  Review -> Apply [label="Approve"]
+  Review -> Draft [label="Reject", condition="preferred_label=Reject"]
+  Apply -> End
+}
+```
 
 ## Development
 
@@ -187,24 +576,77 @@ pnpm build         # Build all packages
 pnpm test          # Run unit tests
 pnpm lint          # Lint with Biome
 pnpm format        # Format with Biome
+pnpm klaus         # Run the CLI (after build)
 ```
 
-Requires Node >= 22 and pnpm.
+### Tech Stack
 
-## Architecture
+| Concern | Choice |
+|---------|--------|
+| Language | TypeScript (strict mode, ES2023 target) |
+| Runtime | Node.js >= 22 |
+| Package manager | pnpm workspaces |
+| Build | tsup (ESM + CJS) |
+| Test | Vitest |
+| Lint/Format | Biome |
+| HTTP | Native fetch |
+| Validation | Zod |
+
+### Repository Structure
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Layer 4: High-Level API                        │
-│  generate() | stream() | generate_object()      │
-├─────────────────────────────────────────────────┤
-│  Layer 3: Core Client + Middleware              │
-│  Client class | Provider routing | Middleware   │
-├─────────────────────────────────────────────────┤
-│  Layer 2: Provider Utilities                    │
-│  SSE parser | HTTP helpers | Error mapping      │
-├─────────────────────────────────────────────────┤
-│  Layer 1: Provider Adapters                     │
-│  AnthropicAdapter | OpenAIAdapter | GeminiAdapter│
-└─────────────────────────────────────────────────┘
+klaus/
+  packages/
+    cli/              # CLI entry point
+      src/
+        cli.ts              # Commander.js CLI (run, validate, skills)
+        backend.ts          # CodergenBackend using agent-loop Session
+        console-interviewer.ts  # Interactive stdin/stdout interviewer
+        skills.ts           # Skill detection and installation
+    pipeline/         # DOT parser and execution engine
+      src/
+        parser.ts           # DOT syntax parser
+        engine.ts           # Pipeline execution engine
+        handlers.ts         # 9 built-in node handlers
+        validation.ts       # Graph validation and lint rules
+        conditions.ts       # Condition expression evaluator
+        context.ts          # Shared key-value context
+        stylesheet.ts       # Model stylesheet parser
+        transforms.ts       # Post-parse graph transforms
+        types.ts            # All pipeline types
+    agent-loop/       # Coding agent loop
+      src/
+        session.ts          # Session orchestrator and agentic loop
+        environment.ts      # LocalExecutionEnvironment
+        events.ts           # Typed event emitter + async iterator
+        truncation.ts       # Output truncation (char + line)
+        loop-detection.ts   # Repeating pattern detection
+        steering.ts         # Steering and follow-up queues
+        tools/              # Tool implementations
+        profiles/           # Provider-aligned profiles
+    llm-client/       # Unified LLM client
+      src/
+        client.ts           # Core Client class
+        types.ts            # Request, Response, Message, etc.
+        adapters/           # Anthropic, OpenAI, Gemini adapters
+        generate.ts         # High-level generate/stream/generate_object
+        retry.ts            # Retry with exponential backoff
+        middleware.ts       # Onion-model middleware
+        catalog.ts          # Model catalog
+  pipelines/          # Starter pipeline files
+    quick-start.dot
+    plan-and-execute.dot
+    multi-model-review.dot
 ```
+
+## Upstream Specs
+
+Klaus implements three NLSpecs from the [Attractor](https://github.com/strongdm/attractor) project:
+
+1. [Unified LLM Client Spec](https://github.com/strongdm/attractor/blob/main/unified-llm-spec.md) — `@klaus/llm-client`
+2. [Coding Agent Loop Spec](https://github.com/strongdm/attractor/blob/main/coding-agent-loop-spec.md) — `@klaus/agent-loop`
+3. [Attractor Spec](https://github.com/strongdm/attractor/blob/main/attractor-spec.md) — `@klaus/pipeline`
+
+## License
+
+See [LICENSE](LICENSE).

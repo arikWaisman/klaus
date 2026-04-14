@@ -1,0 +1,29 @@
+digraph MultiModelReview {
+	graph [
+		goal="Implement and review the task"
+		label="Multi-Model Implementation with Cross-Review"
+		default_max_retries=1
+	]
+
+	Start [shape=Mdiamond]
+
+	// Primary implementation with Claude
+	Implement [shape=box, prompt="Implement: $goal", llm_model="claude-sonnet-4-5-20250929"]
+
+	// Cross-review with a different model
+	Review [shape=box, prompt="Review the code changes just made. Look for bugs, security issues, performance problems, and style issues. If you find issues, fix them.", llm_model="claude-sonnet-4-5-20250929"]
+
+	// Run tests
+	Test [shape=parallelogram, tool_command="pnpm test", timeout="120s"]
+
+	// Gate
+	Check [shape=diamond]
+	Fix [shape=box, prompt="Tests failed. Fix the issues.", max_retries=2]
+
+	End [shape=Msquare]
+
+	Start -> Implement -> Review -> Test -> Check
+	Check -> End [condition="outcome=success"]
+	Check -> Fix [condition="outcome=fail"]
+	Fix -> Test
+}
