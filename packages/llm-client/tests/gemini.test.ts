@@ -536,4 +536,28 @@ describe("GeminiAdapter", () => {
 			await expect(adapter.complete(makeTextRequest())).rejects.toThrow(InvalidRequestError);
 		});
 	});
+
+	// ---- Model pass-through ------------------------------------------------
+
+	describe("model pass-through", () => {
+		it("sends any arbitrary model string directly in the API URL", async () => {
+			const fetchMock = mockFetchOk(geminiTextResponse("hi"));
+			vi.stubGlobal("fetch", fetchMock);
+
+			await adapter.complete(makeTextRequest({ model: "gemini-99-ultra-preview" }));
+
+			const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+			expect(url).toContain("/models/gemini-99-ultra-preview:generateContent");
+		});
+
+		it("exposes default_model from config", () => {
+			expect(adapter.default_model).toBe("gemini-2.0-flash");
+
+			const custom = new GeminiAdapter({
+				api_key: "key",
+				default_model: "gemini-custom-latest",
+			});
+			expect(custom.default_model).toBe("gemini-custom-latest");
+		});
+	});
 });

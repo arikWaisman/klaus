@@ -472,6 +472,7 @@ function handleStreamEvent(
 
 export class OpenAIAdapter implements ProviderAdapter {
 	readonly name = PROVIDER;
+	readonly default_model: string;
 
 	private readonly api_key: string;
 	private readonly base_url: string;
@@ -483,6 +484,7 @@ export class OpenAIAdapter implements ProviderAdapter {
 		this.base_url = (config.base_url ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
 		this.default_headers = config.default_headers ?? {};
 		this.timeout = config.timeout;
+		this.default_model = config.default_model ?? "gpt-4o";
 	}
 
 	// -- Public API ----------------------------------------------------------

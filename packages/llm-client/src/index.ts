@@ -99,10 +99,6 @@ export { StreamAccumulator } from "./accumulator.js";
 export { generate, stream, generate_object, stream_object } from "./generate.js";
 export type { GenerateOptions, GenerateObjectOptions, StreamObjectResult } from "./generate.js";
 
-// Model catalog
-export { getModelInfo, listModels, getLatestModel, registerModel } from "./catalog.js";
-export type { ModelInfo } from "./catalog.js";
-
 // SSE (exposed for advanced use / testing)
 export { parseSSEStream } from "./sse.js";
 export type { SSEEvent } from "./sse.js";

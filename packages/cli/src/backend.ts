@@ -12,11 +12,11 @@ import type { CodergenBackend, Node, PipelineContext } from "@klaus/pipeline";
  * Infer provider from model name, matching llm-client's routing logic.
  */
 function inferProvider(model: string): "anthropic" | "openai" | "gemini" {
-	if (model.startsWith("claude-")) return "anthropic";
+	if (model.startsWith("claude")) return "anthropic";
 	if (model.startsWith("gpt-") || model.startsWith("o1-") || model.startsWith("o3-")) {
 		return "openai";
 	}
-	if (model.startsWith("gemini-")) return "gemini";
+	if (model.startsWith("gemini")) return "gemini";
 	return "anthropic";
 }
 
@@ -34,7 +34,7 @@ function createProfile(model: string) {
 
 export interface SessionBackendOptions {
 	client: Client;
-	model: string;
+	model?: string;
 	cwd: string;
 }
 
@@ -45,7 +45,7 @@ export interface SessionBackendOptions {
 export function createSessionBackend(options: SessionBackendOptions): CodergenBackend {
 	return {
 		async run(node: Node, prompt: string, _context: PipelineContext): Promise<string> {
-			const model = node.attributes.llm_model ?? options.model;
+			const model = node.attributes.llm_model ?? options.model ?? options.client.getDefaultModel()!;
 			const profile = createProfile(model);
 
 			const env = new LocalExecutionEnvironment(options.cwd);

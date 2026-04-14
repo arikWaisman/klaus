@@ -457,10 +457,12 @@ function translateResponse(raw: AnthropicResponse, rateLimit?: RateLimitInfo): R
 
 export class AnthropicAdapter implements ProviderAdapter {
 	readonly name = PROVIDER_NAME;
+	readonly default_model: string;
 	private readonly config: ProviderAdapterConfig;
 
 	constructor(config: ProviderAdapterConfig) {
 		this.config = config;
+		this.default_model = config.default_model ?? "claude-sonnet-4-5-20250929";
 	}
 
 	supports_tool_choice?(mode: ToolChoiceMode): boolean {

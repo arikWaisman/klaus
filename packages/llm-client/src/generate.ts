@@ -34,7 +34,7 @@ import {
 
 export interface GenerateOptions {
 	client: Client;
-	model: string;
+	model?: string;
 	prompt?: string;
 	messages?: Message[];
 	system?: string;
@@ -87,7 +87,7 @@ function normalizeMessages(options: GenerateOptions): Message[] {
 
 function buildRequest(options: GenerateOptions, messages: Message[]): Request {
 	const request: Request = {
-		model: options.model,
+		model: options.model ?? "",
 		messages,
 		provider: options.provider,
 		temperature: options.temperature,
@@ -646,7 +646,8 @@ export function stream_object(options: GenerateObjectOptions): StreamObjectResul
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function inferProviderFromModel(model: string): string | undefined {
+function inferProviderFromModel(model?: string): string | undefined {
+	if (!model) return undefined;
 	if (model.startsWith("claude")) return "anthropic";
 	if (model.startsWith("gpt-") || model.startsWith("o1-") || model.startsWith("o3-"))
 		return "openai";

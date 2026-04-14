@@ -86,6 +86,7 @@ const THINKING_BUDGET: Record<string, number> = {
 
 export class GeminiAdapter implements ProviderAdapter {
 	readonly name = PROVIDER;
+	readonly default_model: string;
 
 	private readonly api_key: string;
 	private readonly base_url: string;
@@ -104,6 +105,7 @@ export class GeminiAdapter implements ProviderAdapter {
 		this.base_url = (config.base_url ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
 		this.default_headers = config.default_headers ?? {};
 		this.timeout = config.timeout;
+		this.default_model = config.default_model ?? "gemini-2.0-flash";
 	}
 
 	// -----------------------------------------------------------------------

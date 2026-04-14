@@ -35,6 +35,7 @@ function makeMockAdapter(name: string): ProviderAdapter {
 	const event: StreamEvent = { type: "TEXT_DELTA", delta: "hi" };
 	return {
 		name,
+		default_model: `${name}-default`,
 		async complete(_request: Request) {
 			return response;
 		},
@@ -267,6 +268,148 @@ describe("Client", () => {
 			// With an unknown model, should fall back to user-specified default_provider (openai)
 			const request = makeRequest({ model: "unknown-model" });
 			expect(() => client.complete(request)).not.toThrow();
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// Default model resolution
+	// -----------------------------------------------------------------------
+
+	describe("default model resolution", () => {
+		it("uses adapter's default_model when request has no model", async () => {
+			let capturedModel: string | undefined;
+			const adapter: ProviderAdapter = {
+				name: "mock",
+				default_model: "mock-best-v2",
+				async complete(request: Request) {
+					capturedModel = request.model;
+					return makeResponse({ provider: "mock" });
+				},
+				async *stream(_request: Request) {
+					yield { type: "TEXT_DELTA" as const, delta: "hi" };
+				},
+			};
+
+			const client = new Client({
+				adapters: { mock: adapter },
+				default_provider: "mock",
+			});
+
+			await client.complete(makeRequest({ model: "" }));
+			expect(capturedModel).toBe("mock-best-v2");
+		});
+
+		it("preserves explicit model when provided", async () => {
+			let capturedModel: string | undefined;
+			const adapter: ProviderAdapter = {
+				name: "anthropic",
+				default_model: "claude-sonnet-4-5-20250929",
+				async complete(request: Request) {
+					capturedModel = request.model;
+					return makeResponse({ provider: "anthropic" });
+				},
+				async *stream(_request: Request) {
+					yield { type: "TEXT_DELTA" as const, delta: "hi" };
+				},
+			};
+
+			const client = new Client({
+				adapters: { anthropic: adapter },
+			});
+
+			await client.complete(makeRequest({ model: "claude-opus-4-6" }));
+			expect(capturedModel).toBe("claude-opus-4-6");
+		});
+
+		it("uses default_model for streaming when request has no model", async () => {
+			let capturedModel: string | undefined;
+			const adapter: ProviderAdapter = {
+				name: "mock",
+				default_model: "mock-stream-v1",
+				async complete(_request: Request) {
+					return makeResponse({ provider: "mock" });
+				},
+				async *stream(request: Request) {
+					capturedModel = request.model;
+					yield { type: "TEXT_DELTA" as const, delta: "hi" };
+				},
+			};
+
+			const client = new Client({
+				adapters: { mock: adapter },
+				default_provider: "mock",
+			});
+
+			const events: StreamEvent[] = [];
+			for await (const event of client.stream(makeRequest({ model: "" }))) {
+				events.push(event);
+			}
+			expect(capturedModel).toBe("mock-stream-v1");
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// getDefaultModel
+	// -----------------------------------------------------------------------
+
+	describe("getDefaultModel", () => {
+		it("returns the default model for a named provider", () => {
+			const anthropic = makeMockAdapter("anthropic");
+			const openai = makeMockAdapter("openai");
+
+			const client = new Client({
+				adapters: { anthropic, openai },
+				default_provider: "anthropic",
+			});
+
+			expect(client.getDefaultModel("anthropic")).toBe("anthropic-default");
+			expect(client.getDefaultModel("openai")).toBe("openai-default");
+		});
+
+		it("returns the default provider's model when no provider arg given", () => {
+			const anthropic = makeMockAdapter("anthropic");
+			const openai = makeMockAdapter("openai");
+
+			const client = new Client({
+				adapters: { anthropic, openai },
+				default_provider: "openai",
+			});
+
+			expect(client.getDefaultModel()).toBe("openai-default");
+		});
+
+		it("returns single adapter's model when no provider specified and no default", () => {
+			const mock = makeMockAdapter("mock");
+
+			const client = new Client({
+				adapters: { mock },
+			});
+
+			expect(client.getDefaultModel()).toBe("mock-default");
+		});
+
+		it("returns undefined when provider is not registered", () => {
+			const mock = makeMockAdapter("mock");
+
+			const client = new Client({
+				adapters: { mock },
+			});
+
+			expect(client.getDefaultModel("nonexistent")).toBeUndefined();
+		});
+
+		it("returns correct defaults from real adapters via fromEnv", () => {
+			vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
+			vi.stubEnv("OPENAI_API_KEY", "sk-openai-test");
+			vi.stubEnv("GEMINI_API_KEY", "gemini-test-key");
+
+			const client = Client.fromEnv();
+
+			expect(client.getDefaultModel("anthropic")).toBe("claude-sonnet-4-5-20250929");
+			expect(client.getDefaultModel("openai")).toBe("gpt-4o");
+			expect(client.getDefaultModel("gemini")).toBe("gemini-2.0-flash");
+
+			vi.unstubAllEnvs();
 		});
 	});
 

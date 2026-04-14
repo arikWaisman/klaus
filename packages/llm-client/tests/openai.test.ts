@@ -450,4 +450,29 @@ describe("OpenAIAdapter", () => {
 			await expect(adapter.complete(makeTextRequest())).rejects.toThrow(InvalidRequestError);
 		});
 	});
+
+	// ---- Model pass-through ------------------------------------------------
+
+	describe("model pass-through", () => {
+		it("sends any arbitrary model string directly to the API body", async () => {
+			const fetchMock = mockFetchOk(openaiTextResponse("hi"));
+			vi.stubGlobal("fetch", fetchMock);
+
+			await adapter.complete(makeTextRequest({ model: "gpt-99-turbo-ultimate" }));
+
+			const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+			const body = JSON.parse(init.body as string);
+			expect(body.model).toBe("gpt-99-turbo-ultimate");
+		});
+
+		it("exposes default_model from config", () => {
+			expect(adapter.default_model).toBe("gpt-4o");
+
+			const custom = new OpenAIAdapter({
+				api_key: "key",
+				default_model: "gpt-custom-latest",
+			});
+			expect(custom.default_model).toBe("gpt-custom-latest");
+		});
+	});
 });

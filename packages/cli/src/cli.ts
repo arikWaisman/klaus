@@ -20,7 +20,7 @@ program
 	.command("run")
 	.description("Run a DOT pipeline")
 	.argument("<file>", "Path to .dot pipeline file")
-	.option("-m, --model <model>", "Default LLM model", "claude-sonnet-4-5-20250929")
+	.option("-m, --model <model>", "LLM model (defaults to provider's default model)")
 	.option("--auto-approve", "Auto-approve all human gates", false)
 	.option("--logs <dir>", "Log output directory", "/tmp/klaus-logs")
 	.option("-q, --quiet", "Suppress event logging", false)

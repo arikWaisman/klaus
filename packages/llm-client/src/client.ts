@@ -106,18 +106,33 @@ export class Client {
 		this.middlewares.push(middleware);
 	}
 
+	/**
+	 * Return the default model for a provider, or the default provider if none
+	 * is specified.  Returns `undefined` when no matching adapter is registered.
+	 */
+	getDefaultModel(provider?: string): string | undefined {
+		const name = provider ?? this.default_provider;
+		if (name) {
+			return this.adapters.get(name)?.default_model;
+		}
+		if (this.adapters.size === 1) {
+			return this.adapters.values().next().value?.default_model;
+		}
+		return undefined;
+	}
+
 	// -----------------------------------------------------------------------
 	// complete — non-streaming request
 	// -----------------------------------------------------------------------
 
 	async complete(request: Request): Promise<Response> {
-		const provider = this.resolveProvider(request);
-		const adapter = this.getAdapter(provider);
+		const resolved = this.resolveRequest(request);
+		const adapter = this.getAdapter(resolved.provider!);
 
 		const handler = (req: Request): Promise<Response> => adapter.complete(req);
 		const chain = composeCompleteMiddleware(this.middlewares, handler);
 
-		return chain(request);
+		return chain(resolved);
 	}
 
 	// -----------------------------------------------------------------------
@@ -125,18 +140,38 @@ export class Client {
 	// -----------------------------------------------------------------------
 
 	stream(request: Request): AsyncIterableIterator<StreamEvent> {
-		const provider = this.resolveProvider(request);
-		const adapter = this.getAdapter(provider);
+		const resolved = this.resolveRequest(request);
+		const adapter = this.getAdapter(resolved.provider!);
 
 		const handler = (req: Request): AsyncIterableIterator<StreamEvent> => adapter.stream(req);
 		const chain = composeStreamMiddleware(this.middlewares, handler);
 
-		return chain(request);
+		return chain(resolved);
 	}
 
 	// -----------------------------------------------------------------------
 	// Private — provider resolution
 	// -----------------------------------------------------------------------
+
+	/**
+	 * Resolve both provider and model for a request.
+	 *
+	 * Resolution order for provider:
+	 *   1. Explicit `request.provider`
+	 *   2. Inferred from model name prefix (claude-* → anthropic, etc.)
+	 *   3. `default_provider` on the client
+	 *   4. Single registered adapter
+	 *
+	 * Resolution for model:
+	 *   - If `request.model` is set, use it as-is.
+	 *   - Otherwise, use the resolved adapter's `default_model`.
+	 */
+	private resolveRequest(request: Request): Request {
+		const provider = this.resolveProvider(request);
+		const adapter = this.getAdapter(provider);
+		const model = request.model || adapter.default_model;
+		return { ...request, provider, model };
+	}
 
 	private resolveProvider(request: Request): string {
 		// 1. Explicit provider on the request.
@@ -144,10 +179,12 @@ export class Client {
 			return request.provider;
 		}
 
-		// 2. Infer from model name prefix.
-		const inferred = inferProvider(request.model);
-		if (inferred && this.adapters.has(inferred)) {
-			return inferred;
+		// 2. Infer from model name prefix (skip if model is empty/unset).
+		if (request.model) {
+			const inferred = inferProvider(request.model);
+			if (inferred && this.adapters.has(inferred)) {
+				return inferred;
+			}
 		}
 
 		// 3. Default provider.
@@ -162,7 +199,7 @@ export class Client {
 
 		// 5. Cannot resolve — error.
 		throw new ConfigurationError(
-			`Unable to resolve provider for model "${request.model}". Set request.provider, configure a default_provider, or register exactly one adapter.`,
+			`Unable to resolve provider for model "${request.model ?? "(none)"}". Set request.provider, configure a default_provider, or register exactly one adapter.`,
 		);
 	}
 

@@ -61,6 +61,7 @@ interface MockAdapterOptions {
 function createMockClient(opts: MockAdapterOptions): Client {
 	const mockAdapter = {
 		name: "mock",
+		default_model: "mock-default",
 		complete: opts.complete ?? (async () => makeResponse("default")),
 		stream: opts.stream ?? async function* () {},
 	};
@@ -585,6 +586,7 @@ describe("generate_object() — Anthropic (tool-based extraction)", () => {
 	function createAnthropicMockClient(complete: (request: Request) => Promise<Response>): Client {
 		const mockAdapter = {
 			name: "anthropic",
+			default_model: "claude-sonnet-4-5-20250929",
 			complete,
 			stream: async function* () {} as () => AsyncIterableIterator<StreamEvent>,
 		};
